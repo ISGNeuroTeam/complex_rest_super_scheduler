@@ -48,7 +48,4 @@ Artem Kushch
 [OT.PLATFORM. License agreement.](LICENSE.md)
 
 ## Acknowledgments
-
-* Hat tip to anyone whose code was used
-* Inspiration
-* etc
+* [otl_interpreter](https://github.com/ISGNeuroTeam/otl_interpreter) - Otl interpreter for platform architecture 2.0.
