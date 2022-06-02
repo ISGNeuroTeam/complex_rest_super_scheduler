@@ -2,9 +2,9 @@ from django_celery_beat.models import PeriodicTask
 from typing import Optional, Tuple
 from pydantic import validator
 
-from plugins.super_scheduler.utils.kwargs_parser import KwargsParser, BaseFormat as BaseParserFormat
-from plugins.super_scheduler.utils.task.get_task import get_all_periodic_task_names, get_all_task_names
-from plugins.super_scheduler.utils.schedule.get_schedule import get_schedule_name_by_schedule_class
+from ..kwargs_parser import KwargsParser, BaseFormat as BaseParserFormat
+from ..schedule_editor.get_schedule import get_schedule_name_by_schedule_class
+from .get_task import get_all_periodic_task_names, get_all_task_names
 
 
 class TaskCreateFormat(BaseParserFormat):
@@ -23,7 +23,7 @@ class TaskCreateFormat(BaseParserFormat):
         Check duplicate periodic task name in django database.
         """
         if value in get_all_periodic_task_names():
-            raise ValueError("Duplicate periodic task name")
+            raise ValueError(f"Duplicate periodic task name {value}")
         return value
 
     @validator('task')
@@ -32,7 +32,7 @@ class TaskCreateFormat(BaseParserFormat):
         Check exist task.
         """
         if value not in get_all_task_names():
-            raise ValueError("Not exist task name")
+            raise ValueError(f"Task name {value} does not exist")
         return value
 
 
@@ -52,26 +52,26 @@ class AddPeriodicTask(KwargsParser):
         return schedule_name, None
 
     @classmethod
-    def create(cls, schedule, task_kwargs: dict) -> Tuple[bool, Optional[str]]:
+    def create(cls, schedule, task_kwargs: dict) -> Optional[str]:
         """
         Add periodic task to django database.
 
         :param schedule: schedule class from super_scheduler.schedule.SCHEDULES
         :param task_kwargs: task kwargs
-        :return: success status & optional error msg
+        :return: optional error msg
         """
 
         task_kwargs, msg = cls.parse_kwargs(task_kwargs, TaskCreateFormat)
         if task_kwargs is None:
-            return False, msg
+            return msg
 
         schedule_name, msg = cls._get_schedule_name_by_schedule_class(schedule)
         if schedule_name is None:
-            return False, msg
+            return msg
 
         PeriodicTask.objects.get_or_create(
             **{schedule_name: schedule},
             **task_kwargs,
         )
 
-        return True, None
+        return None

@@ -2,8 +2,8 @@ from typing import Optional, Union, Dict
 
 from django_celery_beat.models import PeriodicTask
 
-from plugins.super_scheduler.schedule import SCHEDULES
-from plugins.super_scheduler.utils.task.get_task import get_all_periodic_tasks
+from ...schedule import SCHEDULES
+from ..task_editor.get_task import get_all_periodic_tasks
 
 
 def get_schedule_subclass(schedule):
@@ -62,7 +62,7 @@ def get_schedule_name_from_task(task: PeriodicTask):
     :param task: PeriodicTask object
     :return: schedule class (django model)
     """
-    # similar to PeriodicTask.schedule because this method returns string interpretation, not schedule classes!
+    # similar to PeriodicTask.schedule because this method returns subclass, not schedule class!
     if task.crontab:
         schedule_name = 'crontab'
     elif task.interval:

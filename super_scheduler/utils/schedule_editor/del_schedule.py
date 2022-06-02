@@ -1,12 +1,12 @@
 from typing import Optional, Tuple
 from pydantic import validator
 
-from plugins.super_scheduler.schedule import SCHEDULES, schedule_name2class
-from plugins.super_scheduler.utils.kwargs_parser import KwargsParser, BaseFormat as BaseTaskFormat
-from plugins.super_scheduler.utils.schedule.get_schedule import (get_all_schedules_subclasses,
-                                                                 get_all_schedules,
-                                                                 filter_unused_schedules_in_tasks)
-from plugins.super_scheduler.utils.schedule.add_schedule import AddSchedule
+from ...schedule import SCHEDULES, schedule_name2class
+from ..kwargs_parser import KwargsParser, BaseFormat as BaseTaskFormat
+from .get_schedule import (get_all_schedules_subclasses,
+                           get_all_schedules,
+                           filter_unused_schedules_in_tasks)
+from .add_schedule import AddSchedule
 
 
 def del_unused_schedules():
@@ -37,7 +37,7 @@ class ScheduleDeleteFormat(BaseTaskFormat):
         Check exist schedule type.
         """
         if value not in SCHEDULES:
-            raise ValueError(f"Not exist schedule with name: {value}")
+            raise ValueError(f"Schedule name {value} does not exist")
         return value
 
 
@@ -63,22 +63,22 @@ class DelSchedule(KwargsParser):
         return True, None
 
     @classmethod
-    def delete(cls, schedule_kwargs: dict) -> Tuple[bool, Optional[str]]:
+    def delete(cls, schedule_kwargs: dict) -> Optional[str]:
         """
         Delete schedule by schedule kwargs.
 
         :param schedule_kwargs: schedule kwargs
-        :return: success status & optional error msg
+        :return: optional error msg
         """
 
         schedule_kwargs, msg = cls.parse_kwargs(schedule_kwargs, ScheduleDeleteFormat)
         if schedule_kwargs is None:
-            return False, msg
+            return msg
 
         schedule, msg = AddSchedule.create(schedule_kwargs)
         if schedule is None:
-            return False, msg
+            return msg
 
         schedule.delete()
-        return True, None
+        return None
 

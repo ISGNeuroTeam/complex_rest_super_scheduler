@@ -1,8 +1,8 @@
 from typing import Tuple, Optional
 from pydantic import validator
 
-from plugins.super_scheduler.schedule import SCHEDULES
-from plugins.super_scheduler.utils.kwargs_parser import KwargsParser, BaseFormat as BaseParserFormat
+from ...schedule import SCHEDULES
+from ..kwargs_parser import KwargsParser, BaseFormat as BaseParserFormat
 
 
 class ScheduleCreateFormat(BaseParserFormat):
@@ -16,7 +16,7 @@ class ScheduleCreateFormat(BaseParserFormat):
         Check duplicated names in django database.
         """
         if value not in SCHEDULES:
-            raise ValueError(f"Not exist schedule with name: {value}")
+            raise ValueError(f"Schedule name {value} does not exist")
         return value
 
 

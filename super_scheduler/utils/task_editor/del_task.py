@@ -1,9 +1,9 @@
 from django_celery_beat.models import PeriodicTask
-from typing import Optional, Tuple
+from typing import Optional
 from pydantic import validator
 
-from plugins.super_scheduler.utils.kwargs_parser import KwargsParser, BaseFormat as BaseTaskFormat
-from plugins.super_scheduler.utils.task.get_task import get_all_periodic_task_names, get_all_periodic_tasks
+from ..kwargs_parser import KwargsParser, BaseFormat as BaseTaskFormat
+from .get_task import get_all_periodic_task_names, get_all_periodic_tasks
 
 
 class TaskDeleteFormat(BaseTaskFormat):
@@ -17,7 +17,7 @@ class TaskDeleteFormat(BaseTaskFormat):
         Check exist task.
         """
         if value not in get_all_periodic_task_names():
-            raise ValueError("Not exist periodic task name")
+            raise ValueError(f"Periodic task name {value} does not exist")
         return value
 
 
@@ -39,21 +39,21 @@ def check_schedule_in_another_tasks(schedule_subclass, task_name: str = None) ->
 class DelPeriodicTask(KwargsParser):
 
     @classmethod
-    def delete(cls, task_kwargs: dict) -> Tuple[bool, Optional[str]]:
+    def delete(cls, task_kwargs: dict) -> Optional[str]:
         """
         Delete periodic task with unused schedules.
 
         :param task_kwargs: task kwargs
-        :return: success status & optional error msg
+        :return: optional error msg
         """
 
         task_kwargs, msg = cls.parse_kwargs(task_kwargs, TaskDeleteFormat)
         if task_kwargs is None:
-            return False, msg
+            return msg
 
         task = PeriodicTask.objects.get(
             **task_kwargs
         )
 
         task.delete()
-        return True, None
+        return None

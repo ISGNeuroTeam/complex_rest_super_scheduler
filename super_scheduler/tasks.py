@@ -2,7 +2,7 @@ import logging
 import time
 
 from core.celeryapp import app
-from plugins.super_scheduler.utils.schedule.del_schedule import del_unused_schedules
+from .utils.schedule_editor.del_schedule import del_unused_schedules
 
 
 log = logging.getLogger('super_scheduler.tasks')

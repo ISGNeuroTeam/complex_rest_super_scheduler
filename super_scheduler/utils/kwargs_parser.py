@@ -2,7 +2,7 @@ from typing import Tuple, Optional
 
 from pydantic import BaseModel, validator
 
-from plugins.super_scheduler.utils.validate_format import validate_format
+from .validate_format import validate_format
 
 
 class BaseFormat(BaseModel):
