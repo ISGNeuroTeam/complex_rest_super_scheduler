@@ -2,8 +2,8 @@ from typing import Optional, Union, Dict
 
 from django_celery_beat.models import PeriodicTask
 
-from ...schedule import SCHEDULES
-from ..task_editor.get_task import get_all_periodic_tasks
+from ..schedule.schedule_objects import SCHEDULES, schedule_name2class, schedule_name2format
+from .get_task import get_all_periodic_tasks
 
 
 def get_schedule_subclass(schedule):
@@ -93,3 +93,28 @@ def filter_unused_schedules_in_tasks(schedule_dict: Dict[str, any]) -> Dict[str,
         if task_schedule_str in schedule_dict:
             del schedule_dict[task_schedule_str]
     return schedule_dict
+
+
+def check_schedule_in_another_tasks(schedule_subclass, task_name: str = None) -> bool:
+    """
+    Check schedule used another tasks.
+
+    :param schedule_subclass: schedule subclass
+    :param task_name: task name
+    :return: success status
+    """
+    for task_iter in get_all_periodic_tasks():
+        if (task_iter.schedule == schedule_subclass) and \
+                ((task_name is None) or (task_name and task_iter.name != task_name)):
+            return True
+    return False
+
+
+def get_schedule_class_and_format_by_name(schedule_name: str) -> tuple:
+    """
+    Get schedule name and return schedule class with kwargs format.
+
+    :param schedule_name: schedule name
+    :return: schedule class & schedule format
+    """
+    return schedule_name2class(schedule_name), schedule_name2format(schedule_name)

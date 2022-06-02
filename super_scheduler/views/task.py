@@ -1,5 +1,5 @@
 from rest_framework.request import Request
-from typing import Union, Tuple, Optional
+from typing import Union, Optional
 import super_logger
 import uuid
 
@@ -7,10 +7,9 @@ from rest.permissions import IsAuthenticated
 from rest.response import Response, status
 from rest.views import APIView
 
-from ..utils.task_editor.get_task import get_all_task_names, get_all_periodic_task_names
-from ..utils.task_editor.add_task import AddPeriodicTask
-from ..utils.task_editor.del_task import DelPeriodicTask
-from ..utils.schedule_editor.add_schedule import AddSchedule
+from ..utils.get_task import get_all_task_names, get_all_periodic_task_names
+from ..periodic_task.periodic_task import PeriodicTask
+from ..schedule.schedule import Schedule
 
 
 class TaskView(APIView):
@@ -47,12 +46,12 @@ class TaskView(APIView):
             return Response(data=msg_error, status=status.HTTP_400_BAD_REQUEST)
 
         # create schedule
-        schedule, msg_error = AddSchedule.create(req_params['schedule'])
+        schedule, msg_error = Schedule.get_or_create(req_params['schedule'])
         if schedule is None:
             return Response(data=msg_error, status=status.HTTP_400_BAD_REQUEST)
 
         # create task
-        msg_error = AddPeriodicTask.create(schedule=schedule, task_kwargs=req_params['task'])
+        msg_error = PeriodicTask.get_or_create(schedule=schedule, task_kwargs=req_params['task'])
         if msg_error:
             return Response(data=msg_error, status=status.HTTP_400_BAD_REQUEST)
 
@@ -73,7 +72,7 @@ class TaskView(APIView):
             return Response(data=msg_error, status=status.HTTP_400_BAD_REQUEST)
 
         # delete task
-        msg_error = DelPeriodicTask.delete(req_params['task'])
+        msg_error = PeriodicTask.delete(req_params['task'])
         if msg_error:
             return Response(data=msg_error, status=status.HTTP_400_BAD_REQUEST)
 

@@ -1,10 +1,6 @@
-from pydantic import BaseModel as BaseModelFormat
 from celery.schedules import BaseSchedule
 
 from django.db import models
-from django_celery_beat.models import MICROSECONDS, SECONDS, MINUTES, HOURS, DAYS, PERIOD_CHOICES, SINGULAR_PERIODS
-
-from ..base import BaseFormat
 
 
 class BaseCelerySchedule(BaseSchedule):
