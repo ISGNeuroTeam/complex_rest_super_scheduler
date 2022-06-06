@@ -32,7 +32,7 @@ class Schedule:
             **schedule_kwargs,
         )
 
-        return None if schedule is False else schedule, created
+        return None if schedule is False else schedule, None if isinstance(created, bool) else "Can't create schedule"
 
     @classmethod
     def delete_by_schedule_subclass(cls, schedule_name: str, schedule_subclass) -> Tuple[bool, Optional[str]]:
