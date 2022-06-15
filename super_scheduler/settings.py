@@ -26,6 +26,18 @@ config_parser.read(Path(__file__).parent / 'super_scheduler.conf')
 
 ini_config = merge_ini_config_with_defaults(config_parser, default_ini_config)
 
+COMPLEX_REST_IP = ini_config['address']['ip']
+COMPLEX_REST_PORT = ini_config['address']['port']
+COMPLEX_REST_ADDRESS = COMPLEX_REST_IP + ':' + COMPLEX_REST_PORT
+
+
+# PLUGINS
+
+JOBSMANAGER_TRANSIT = 'jobsmanager_transit' in ini_config
+JOBSMANAGER_TRANSIT_MAKEJOB = ini_config['jobsmanager_transit']['makejob']
+
+
+# STATIC SCHEDULES
 
 CELERY_BEAT_SCHEDULE = {
     "trash cleaner": {
