@@ -1,7 +1,7 @@
 from django_celery_beat.models import PeriodicTask
-from inspect import getmembers, isfunction
-
-from .. import tasks
+# from inspect import getmembers, isfunction
+#
+# from .. import tasks
 from core.celeryapp import app
 
 
