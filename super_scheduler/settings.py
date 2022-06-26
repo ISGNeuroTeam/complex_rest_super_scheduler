@@ -2,7 +2,7 @@ from celery.schedules import crontab
 import configparser
 from pathlib import Path
 
-from core.settings.ini_config import merge_ini_config_with_defaults
+# from core.settings.ini_config import merge_ini_config_with_defaults
 
 
 default_ini_config = {
@@ -24,18 +24,22 @@ config_parser = configparser.ConfigParser()
 
 config_parser.read(Path(__file__).parent / 'super_scheduler.conf')
 
-ini_config = merge_ini_config_with_defaults(config_parser, default_ini_config)
+# ini_config = merge_ini_config_with_defaults(config_parser, default_ini_config)
+ini_config = config_parser
 
-COMPLEX_REST_IP = ini_config['address']['ip']
-COMPLEX_REST_PORT = ini_config['address']['port']
+COMPLEX_REST_IP = ini_config['address_rest']['ip']
+COMPLEX_REST_PORT = ini_config['address_rest']['port']
 COMPLEX_REST_ADDRESS = COMPLEX_REST_IP + ':' + COMPLEX_REST_PORT
 
+# CLIENT
+
+LOGIN = ini_config['client'].get('login', None)
+PASSWORD = ini_config['client'].get('password', None)
 
 # PLUGINS
 
 JOBSMANAGER_TRANSIT = 'jobsmanager_transit' in ini_config
-JOBSMANAGER_TRANSIT_MAKEJOB = ini_config['jobsmanager_transit']['makejob']
-
+JOBSMANAGER_TRANSIT_MAKEJOB = ini_config['jobsmanager_transit'].get('makejob', None)
 
 # STATIC SCHEDULES
 

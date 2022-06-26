@@ -1,4 +1,6 @@
 from typing import Tuple, Optional
+import super_logger
+import logging
 
 from ..utils.get_schedule import get_schedule_class_and_format_by_name, get_all_schedules_subclasses
 from ..utils.kwargs_parser import KwargsParser
@@ -9,6 +11,8 @@ from .schedule_objects import SCHEDULES, schedule_name2class
 
 class Schedule:
 
+    logger = logging.getLogger('super_scheduler.schedule')
+
     @classmethod
     def get_or_create(cls, schedule_kwargs: dict) -> Tuple[any, Optional[str]]:
         """
@@ -18,6 +22,7 @@ class Schedule:
         :return: schedule class & None | None & error msg
         """
 
+        cls.logger.info(schedule_kwargs)
         schedule_name_dict, msg = KwargsParser.parse_kwargs(schedule_kwargs, ScheduleCreateFormat)
         if schedule_name_dict is None:
             return None, msg

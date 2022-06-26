@@ -1,4 +1,4 @@
-import logging
+import super_logger, logging
 import time
 import requests
 
@@ -8,12 +8,12 @@ from .utils.del_schedule import del_unused_schedules
 from .settings import COMPLEX_REST_ADDRESS, JOBSMANAGER_TRANSIT, JOBSMANAGER_TRANSIT_MAKEJOB
 
 
-log = logging.getLogger('super_scheduler.tasks')
+logger = logging.getLogger('super_scheduler.tasks')
 
 
 @app.task()
 def test_logger():
-    log.info('Success task log.')
+    logger.info('Success task log.')
     time.sleep(1)
 
 
@@ -24,12 +24,12 @@ def trash_cleaner(clean_old_schedule: bool = True,):
 
     :param clean_old_schedule: delete unused schedules
     """
-    log.info('Trash cleaning...')
+    logger.info('Trash cleaning...')
 
     if clean_old_schedule:
         del_unused_schedules()
 
-    log.info('Trash cleaned.')
+    logger.info('Trash cleaned.')
 
 
 @app.task()
@@ -39,7 +39,7 @@ def otl_makejob(otl: str):
 
     :param otl: OTL line
     """
-    log.info(f'Calculating OTL line: {otl}')
+    logger.info(f'Calculating OTL line: {otl}')
 
     if JOBSMANAGER_TRANSIT:
         url = f'http://{COMPLEX_REST_ADDRESS}/{JOBSMANAGER_TRANSIT_MAKEJOB}'
@@ -54,6 +54,6 @@ def otl_makejob(otl: str):
                                            'cache_ttl': 100,
                                            'timeout': 100})
 
-        log.info(f'Calculated OTL line with content: {content.text}')
+        logger.info(f'Calculated OTL line with content: {content.text}')
     else:
-        log.info("Add plugin 'JOBSMANAGER_TRANSIT'")
+        logger.info("Add plugin 'JOBSMANAGER_TRANSIT'")

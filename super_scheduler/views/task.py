@@ -1,6 +1,6 @@
 from rest_framework.request import Request
 from typing import Union, Optional
-import super_logger
+import super_logger, logging
 import uuid
 
 from rest.permissions import IsAuthenticated
@@ -17,7 +17,7 @@ class TaskView(APIView):
     permission_classes = (IsAuthenticated,)
     http_method_names = ['post', 'delete', 'get']
     handler_id = str(uuid.uuid4())
-    logger = super_logger.getLogger('super_scheduler')
+    logger = logging.getLogger('super_scheduler')
 
     @staticmethod
     def _validate_request_format(request_dict: dict, necessary_params: Union[tuple, list, set]) -> Optional[str]:
@@ -39,6 +39,7 @@ class TaskView(APIView):
     def post(self, request: Request) -> Response:
 
         req_params = dict(request.data)
+        self.logger.info(f"Got post request data: {request.data}")
 
         # validate format
         msg_error = self._validate_request_format(req_params, ('task', 'schedule'))
