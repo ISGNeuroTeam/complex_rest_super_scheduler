@@ -1,9 +1,13 @@
 [logging]
 level = INFO
 
-[address]
-ip = localhost
-port = 8111
+[client]
+username = admin
+password = admin
+
+[address_rest]
+host = localhost
+port = 55555
 
 [jobsmanager_transit]
 makejob = jobsmanager_transit/v1/makejob/

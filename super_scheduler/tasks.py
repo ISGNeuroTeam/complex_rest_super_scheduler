@@ -33,16 +33,17 @@ def trash_cleaner(clean_old_schedule: bool = True,):
 
 
 @app.task()
-def otl_makejob(otl: str):
+def otl_makejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS):
     """
     Run the OTL line on a schedule.
 
     :param otl: OTL line
+    :param complex_rest_address: complex_rest address 'ip:port'
     """
     logger.info(f'Calculating OTL line: {otl}')
 
     if JOBSMANAGER_TRANSIT:
-        url = f'http://{COMPLEX_REST_ADDRESS}/{JOBSMANAGER_TRANSIT_MAKEJOB}'
+        url = f'http://{complex_rest_address}/{JOBSMANAGER_TRANSIT_MAKEJOB}'
 
         content = requests.post(url, data={'sid': 999999,
                                            'original_otl': f'{otl} |head 1000',
