@@ -88,6 +88,10 @@ def client():
         -C -T super_scheduler.tasks.test_logger --one_off --name test_logger123
         clocked --clocked_time '2023-11-28 01:01:01'
 
+        -C -T super_scheduler.tasks.test_logger --one_off --name test_logger123 crontab
+
+        -C -T super_scheduler.tasks.test_logger --one_off --name test_logger123 interval --every 1 --period minutes
+
     """
 
     parser = argparse.ArgumentParser(description='SuperScheduler client')
@@ -117,11 +121,11 @@ def client():
 
     crontab_parser = subparsers.add_parser('crontab')
     schedule_parsers['crontab'] = crontab_parser
-    crontab_parser.add_argument('--minute', type=str, required=True, help=f'Default \'*\'')
-    crontab_parser.add_argument('--hour', type=str, required=True, help=f'Default \'*\'')
-    crontab_parser.add_argument('--day_of_week', type=str, required=True, help=f'Default \'*\'')
-    crontab_parser.add_argument('--day_of_month', type=str, required=True, help=f'Default \'*\'')
-    crontab_parser.add_argument('--month_of_year', type=str, required=True, help=f'Default \'*\'')
+    crontab_parser.add_argument('--minute', type=str, help=f'Default \'*\'', default='*')
+    crontab_parser.add_argument('--hour', type=str, help=f'Default \'*\'', default='*')
+    crontab_parser.add_argument('--day_of_week', type=str, help=f'Default \'*\'', default='*')
+    crontab_parser.add_argument('--day_of_month', type=str, help=f'Default \'*\'', default='*')
+    crontab_parser.add_argument('--month_of_year', type=str, help=f'Default \'*\'', default='*')
     crontab_parser.add_argument('--schedule_name', type=str, help="Schedule name; default 'crontab'", default="crontab")
 
     interval_parser = subparsers.add_parser('interval')
