@@ -46,11 +46,13 @@ def send_request(address, data, token, post: bool = False, delete: bool = False,
 
 
 def parse_schedule(schedule_parsers, args):
-    schedule_name = args.schedule_name
+    if 'schedule_name' in args:
+        schedule_name = args.schedule_name
 
-    schedule_dict = schedule_parsers[schedule_name].parse_known_args()[0].__dict__
-    schedule_dict['name'] = schedule_dict['schedule_name']
-    return schedule_dict
+        schedule_dict = schedule_parsers[schedule_name].parse_known_args()[0].__dict__
+        schedule_dict['name'] = schedule_dict['schedule_name']
+        return schedule_dict
+    return None
 
 
 def data_construction(args, schedule_parsers) -> dict:
@@ -92,6 +94,10 @@ def client():
 
         -C -T super_scheduler.tasks.test_logger --one_off --name test_logger123 interval --every 1 --period minutes
 
+        -D --name test_logger123
+
+        -C -T super_scheduler.tasks.otl_makejob -Ta "| otstats index=test" --one_off --name test_otl  clocked --clocked_time '2023-11-28 01:01:01'
+
     """
 
     parser = argparse.ArgumentParser(description='SuperScheduler client')
@@ -119,33 +125,43 @@ def client():
     # schedule subparsers
     schedule_parsers = {}
 
-    crontab_parser = subparsers.add_parser('crontab')
-    schedule_parsers['crontab'] = crontab_parser
+    crontab_schedule_name = 'crontab'
+    crontab_parser = subparsers.add_parser(crontab_schedule_name)
+    schedule_parsers[crontab_schedule_name] = crontab_parser
     crontab_parser.add_argument('--minute', type=str, help=f'Default \'*\'', default='*')
     crontab_parser.add_argument('--hour', type=str, help=f'Default \'*\'', default='*')
     crontab_parser.add_argument('--day_of_week', type=str, help=f'Default \'*\'', default='*')
     crontab_parser.add_argument('--day_of_month', type=str, help=f'Default \'*\'', default='*')
     crontab_parser.add_argument('--month_of_year', type=str, help=f'Default \'*\'', default='*')
-    crontab_parser.add_argument('--schedule_name', type=str, help="Schedule name; default 'crontab'", default="crontab")
+    crontab_parser.add_argument('--schedule_name', type=str, help=f"Schedule name; default '{crontab_schedule_name}'",
+                                default=crontab_schedule_name)
 
-    interval_parser = subparsers.add_parser('interval')
-    schedule_parsers['interval'] = interval_parser
+    interval_schedule_name = 'interval'
+    interval_parser = subparsers.add_parser(interval_schedule_name)
+    schedule_parsers[interval_schedule_name] = interval_parser
     interval_parser.add_argument('--every', type=int, required=True, help='Run every N * time range')
     interval_parser.add_argument('--period', type=str, required=True, help='Time range; example: minutes')
-    interval_parser.add_argument('--schedule_name', type=str, help="Schedule name; default 'interval'", default="interval")
+    interval_parser.add_argument('--schedule_name', type=str, help=f"Schedule name; default '{interval_schedule_name}'",
+                                 default=interval_schedule_name)
 
-    solar_parser = subparsers.add_parser('solar')
-    schedule_parsers['solar'] = solar_parser
-    solar_parser.add_argument('--event', type=str, required=True, help='Solar events; example: dawn_astronomical; '
-                                                      'see https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html#solar-schedules')
+    solar_schedule_name = 'solar'
+    solar_parser = subparsers.add_parser(solar_schedule_name)
+    schedule_parsers[solar_schedule_name] = solar_parser
+    solar_parser.add_argument('--event', type=str, required=True,
+                              help='Solar events; example: dawn_astronomical; '
+                                   'see https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html#solar-schedules')
     solar_parser.add_argument('--latitude', type=Union[int, float], required=True, help='Current latitude')
     solar_parser.add_argument('--longitude', type=Union[int, float], required=True, help='Current longitude')
-    solar_parser.add_argument('--schedule_name', type=str, help="Schedule name; default 'solar'", default="solar")
+    solar_parser.add_argument('--schedule_name', type=str, help=f"Schedule name; default '{solar_schedule_name}'",
+                              default=solar_schedule_name)
 
-    clocked_parser = subparsers.add_parser('clocked')
-    schedule_parsers['clocked'] = clocked_parser
-    clocked_parser.add_argument('--clocked_time', type=str, required=True, help='Datetime format; example: 2023-11-28 01:01:01')
-    clocked_parser.add_argument('--schedule_name', type=str, help="Schedule name; default 'clocked'", default="clocked")
+    clocked_schedule_name = 'clocked'
+    clocked_parser = subparsers.add_parser(clocked_schedule_name)
+    schedule_parsers[clocked_schedule_name] = clocked_parser
+    clocked_parser.add_argument('--clocked_time', type=str, required=True,
+                                help='Datetime format; example: 2023-11-28 01:01:01')
+    clocked_parser.add_argument('--schedule_name', type=str, help=f"Schedule name; default '{clocked_schedule_name}'",
+                                default=clocked_schedule_name)
 
     args = parser.parse_args()
     print(args)
