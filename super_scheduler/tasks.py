@@ -5,7 +5,7 @@ import requests
 from core.celeryapp import app
 from .utils.del_schedule import del_unused_schedules
 
-from .settings import COMPLEX_REST_ADDRESS, JOBSMANAGER_TRANSIT, JOBSMANAGER_TRANSIT_MAKEJOB
+from .settings import COMPLEX_REST_ADDRESS, JOBSMANAGER_TRANSIT_MAKEJOB
 
 
 logger = logging.getLogger('super_scheduler.tasks')
@@ -33,7 +33,7 @@ def trash_cleaner(clean_old_schedule: bool = True,):
 
 
 @app.task()
-def otl_makejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
+def otlmakejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
                 tws: int = 0, twf: int = 0, sid: int = 999999, ttl: int = 100, timeout: int = 100,
                 username: str = 'admin'):
     """
@@ -51,18 +51,19 @@ def otl_makejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
     """
     logger.info(f'Calculating OTL line: {otl}')
 
-    if JOBSMANAGER_TRANSIT:
+    if JOBSMANAGER_TRANSIT_MAKEJOB:
         url = f'http://{complex_rest_address}/{JOBSMANAGER_TRANSIT_MAKEJOB}'
+        data = {'sid': sid,
+                'original_otl': f'{otl} |head 1000',
+                'tws': tws,
+                'twf': twf,
+                'username': username,
+                'preview': 'false',
+                'field_extraction': 'false',
+                'cache_ttl': ttl,
+                'timeout': timeout}
 
-        content = requests.post(url, data={'sid': sid,
-                                           'original_otl': f'{otl} |head 1000',
-                                           'tws': tws,
-                                           'twf': twf,
-                                           'username': username,
-                                           'preview': 'false',
-                                           'field_extraction': 'false',
-                                           'cache_ttl': ttl,
-                                           'timeout': timeout})
+        content = requests.post(url, data=data)
 
         logger.info(f'Calculated OTL line with content: {content.text}')
     else:

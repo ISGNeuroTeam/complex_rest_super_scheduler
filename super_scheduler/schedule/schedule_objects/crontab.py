@@ -1,4 +1,6 @@
 from django_celery_beat.models import CrontabSchedule
+from typing import Optional
+from pydantic import validator
 
 from .base import BaseScheduleFormat
 

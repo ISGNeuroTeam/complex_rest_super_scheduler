@@ -36,10 +36,13 @@ COMPLEX_REST_ADDRESS = COMPLEX_REST_HOST + ':' + COMPLEX_REST_PORT
 USERNAME = ini_config['client'].get('username', None) if 'client' in ini_config else None
 PASSWORD = ini_config['client'].get('password', None) if 'client' in ini_config else None
 
-# PLUGINS
+# API
 
-JOBSMANAGER_TRANSIT = 'jobsmanager_transit' in ini_config
-JOBSMANAGER_TRANSIT_MAKEJOB = ini_config['jobsmanager_transit'].get('makejob', None)
+if 'api' not in ini_config:
+    raise ValueError("Add [api] in config")
+JOBSMANAGER_TRANSIT_MAKEJOB = ini_config['api'].get('makejob', None) if 'api' in ini_config else None
+AUTH_URL = ini_config['api'].get('auth', None) if 'api' in ini_config else None
+SUPER_SCHEDULER_URL = ini_config['api'].get('super_scheduler_task', None) if 'api' in ini_config else None
 
 # STATIC SCHEDULES
 
