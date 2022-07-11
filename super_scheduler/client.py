@@ -9,7 +9,6 @@ from typing import Union, Optional
 
 from settings import COMPLEX_REST_HOST, COMPLEX_REST_PORT, USERNAME, PASSWORD, AUTH_URL, SUPER_SCHEDULER_URL
 
-
 logger = logging.getLogger("super_scheduler")
 
 
@@ -83,15 +82,15 @@ class SuperScheduler:
                 schedule_dict['name'] = schedule_name
                 preprocess_schedule(schedule_dict)
                 return schedule_dict
-        raise ValueError("No schedule or can't parse")
+        raise ValueError("No schedule or can't parse it, see documentation and examples")
 
     @classmethod
     def data_construction(cls,
-                          task: str,
+                          task: Optional[str],
+                          task_name: Optional[str],
                           schedule_parsers: dict,
                           task_args: Optional[list] = None,
                           task_kwargs: Optional[dict] = None,
-                          task_name: Optional[str] = None,
                           one_off: Optional[bool] = None,
                           required_one_off_schedules: Optional[list[str]] = None) -> dict:
         """
@@ -210,7 +209,7 @@ class SuperScheduler:
         task_parser.add_argument('-N', '--name', type=str, help='Periodic task (scheduled) name. Must be unique.')
         task_parser.add_argument('--args', type=str, nargs="*",
                                  help="Task args if necessary. Only use with argument '--task'. "
-                                      "Example: '--args value1 value2'")
+                                      "Example: '--args value1,value2,value3'")
         task_parser.add_argument('--kwargs', type=str, nargs="*",
                                  help="Task kwargs if necessary. Only use with argument '--task'. "
                                       "Example: '--kwargs arg1=value1 arg2=value2'")
@@ -223,7 +222,8 @@ class SuperScheduler:
     def create_parsers(cls):
         parser = argparse.ArgumentParser(
             description='SuperScheduler client.\n'
-                        'To see schedule args.'
+                        'To see schedule args.\n'
+                        "Use '--' to split positional arguments."
         )
 
         parser.add_argument('-U', '--username', type=str,
@@ -236,12 +236,12 @@ class SuperScheduler:
         parser.add_argument('--port', type=str, help=f'Port complex_rest. Default: \'{cls.COMPLEX_REST_PORT}\'.',
                             default=cls.COMPLEX_REST_PORT)
 
-        parser.add_argument('-C', '--create', action='store_true',
+        parser.add_argument('--create', action='store_true',
                             help="Create periodic task. Required argumets: '--task', '--name'. "
                                  "Optional argumets: '--args', '--kwargs', '--one_off'.")
-        parser.add_argument('-D', '--delete', action='store_true',
+        parser.add_argument('--delete', action='store_true',
                             help="Delete periodic task. Required arguments: '--name'.")
-        parser.add_argument('-G', '--get', action='store_true',
+        parser.add_argument('--get', action='store_true',
                             help='Get all available tasks and names of periodic tasks. Non required argumets.')
 
         subparsers = parser.add_subparsers()
@@ -266,13 +266,13 @@ def client():
 
         -D --name test_logger123
 
-        -C -T super_scheduler.tasks.otlmakejob -Ta "| otstats index=test" --one_off --name test_otl  clocked --clocked_time '2023-11-28 01:01:01'
+        -C task -T super_scheduler.tasks.otlmakejob -args "| otstats index=test" --one_off --name test_otl -- clocked --clocked_time '2023-11-28 01:01:01'
 
     """
 
     parser, subparsers, task_parser, task_subparsers, schedule_parsers, required_one_off_schedules = SuperScheduler.create_parsers()
 
-    args = parser.parse_args()
+    args = parser.parse_known_args()[0]
     print("\nArgs:")
     SuperScheduler.pretty_print(data_dict2dict=args.__dict__)
     logger.debug("Parsed args")
@@ -301,25 +301,28 @@ def client():
         raise ValueError("Set one flag '--create', '--delete' or '--get' before 'task'!")
     logger.debug("Got event")
 
-    if create and (not args.task or not args.name):
-        raise ValueError("Set '--task' and '--name'")
-
-    elif delete and not args.name:
-        raise ValueError("Set '--name'")
-
     # construct data for request
-    data = SuperScheduler.data_construction(
-        args.task,
-        schedule_parsers,
-        [] if not args.task_args else args.task_args,
-        {} if not args.task_kwargs else args.task_kwargs,
-        args.task_name,
-        args.one_off,
-        required_one_off_schedules
-    )
-    logger.debug("Success data construction")
+    data = {}
+    if 'task' in sys.argv[1:]:
 
-    SuperScheduler.send_request(address, data, token, post=create, delete=delete, get=get)
+        if create and (not args.task or not args.name):
+            raise ValueError("Set '--task' and '--name'")
+
+        elif delete and not args.name:
+            raise ValueError("Set '--name'")
+
+        data = SuperScheduler.data_construction(
+            args.task,
+            args.name,
+            schedule_parsers,
+            [] if not args.args else args.args,
+            {} if not args.kwargs else args.kwargs,
+            args.one_off,
+            required_one_off_schedules
+        )
+        logger.debug("Success data construction")
+
+    SuperScheduler.send_request(data, token, post=create, delete=delete, get=get)
     logger.debug("Success send request")
 
 

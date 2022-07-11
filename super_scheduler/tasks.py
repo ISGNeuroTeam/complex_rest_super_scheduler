@@ -1,6 +1,8 @@
 import super_logger, logging
 import time
+import os
 import requests
+import subprocess
 
 from core.celeryapp import app
 from .utils.del_schedule import del_unused_schedules
@@ -68,3 +70,46 @@ def otlmakejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
         logger.info(f'Calculated OTL line with content: {content.text}')
     else:
         logger.info("Add plugin 'JOBSMANAGER_TRANSIT'")
+
+
+@app.task()
+def bash(filepath: str):
+    """
+    Execute bash-scripts
+
+    :param filepath: path to bash-script
+    """
+    logger.info(f'Get bash-script to execute: {filepath}.')
+    if os.getlogin() == 'root':
+        raise FileExistsError("Don't start complex_rest with 'root' user")
+    if not os.path.exists(filepath):
+        raise FileExistsError("Not exist path")
+    if not os.path.isfile(filepath):
+        raise FileExistsError("Not file")
+    if not os.access(filepath, os.X_OK):
+        raise FileExistsError("Can't execute, check permissions")
+    result = subprocess.run(["bash", filepath])
+    print(str(result))
+    logger.info(f'Success execute bash-script.')
+
+
+@app.task()
+def commands(*args):
+    """
+
+    :param args: linux commands, example: []
+    :return:
+    """
+    logger.info(f'Get linux commands to execute: {args}')
+    if os.getlogin() == 'root':
+        raise FileExistsError("Don't start complex_rest with 'root' user")
+    print(args)
+    result = subprocess.run(args)
+    logger.info(f'Result: {result}.')
+    logger.info(f'Success execute linux commands.')
+
+
+
+
+
+
