@@ -9,5 +9,7 @@ password = admin
 host = localhost
 port = 55555
 
-[jobsmanager_transit]
+[api]
+auth = auth/login/
+super_scheduler_task = super_scheduler/v1/task/
 makejob = jobsmanager_transit/v1/makejob/

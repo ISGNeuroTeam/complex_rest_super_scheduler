@@ -147,7 +147,10 @@ class SuperScheduler:
         if content is not None:
             cls.logger.info(f"Finish request with code {content.status_code}.")
             print("\nResult:")
-            cls.pretty_print(data_str2dict=content.text)
+            if isinstance(content.text, str):
+                cls.pretty_print(data_str2dict=content.text)
+            else:
+                print(content.text)
             return content.status_code
         else:
             raise ValueError("Finish request without content")

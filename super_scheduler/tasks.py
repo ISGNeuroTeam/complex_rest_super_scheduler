@@ -13,6 +13,11 @@ from .settings import COMPLEX_REST_ADDRESS, JOBSMANAGER_TRANSIT_MAKEJOB
 logger = logging.getLogger('super_scheduler.tasks')
 
 
+# os.getlogin() now work for WSL
+def get_current_user() -> str:
+    return os.getenv('username')
+
+
 @app.task()
 def test_logger():
     logger.info('Success task log.')
@@ -80,7 +85,7 @@ def bash(filepath: str):
     :param filepath: path to bash-script
     """
     logger.info(f'Get bash-script to execute: {filepath}.')
-    if os.getlogin() == 'root':
+    if get_current_user() == 'root':
         raise FileExistsError("Don't start complex_rest with 'root' user")
     if not os.path.exists(filepath):
         raise FileExistsError("Not exist path")
@@ -97,11 +102,11 @@ def bash(filepath: str):
 def commands(*args):
     """
 
-    :param args: linux commands, example: []
+    :param args: linux commands, example: ["ls", "-la"]
     :return:
     """
     logger.info(f'Get linux commands to execute: {args}')
-    if os.getlogin() == 'root':
+    if get_current_user() == 'root':
         raise FileExistsError("Don't start complex_rest with 'root' user")
     print(args)
     result = subprocess.run(args)
