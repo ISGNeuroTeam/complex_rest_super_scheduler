@@ -108,7 +108,6 @@ def commands(*args):
     logger.info(f'Get linux commands to execute: {args}')
     if get_current_user() == 'root':
         raise FileExistsError("Don't start complex_rest with 'root' user")
-    print(args)
     result = subprocess.run(args)
     logger.info(f'Result: {result}.')
     logger.info(f'Success execute linux commands.')

@@ -1,4 +1,5 @@
 from pydantic import validator
+import json
 
 from ..utils.get_task import get_all_periodic_task_names, get_all_task_names
 from ..utils.kwargs_parser import BaseFormat as BaseTaskParserFormat
@@ -31,6 +32,20 @@ class TaskCreateFormat(BaseTaskParserFormat):
         if value not in get_all_task_names():
             raise ValueError(f"Task name {value} does not exist")
         return value
+
+    @validator('args')
+    def args_transform(cls, value: str) -> str:
+        """
+        Transform args to correct Django format - string.
+        """
+        return json.dumps(value)
+
+    @validator('kwargs')
+    def kwargs_transform(cls, value: str) -> str:
+        """
+        Transform kwargs to correct Django format - string.
+        """
+        return json.dumps(value)
 
 
 class TaskDeleteFormat(BaseTaskParserFormat):
