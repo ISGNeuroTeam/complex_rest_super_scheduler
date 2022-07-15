@@ -19,13 +19,12 @@ def get_current_user() -> str:
 
 
 @app.task()
-def test_logger():
-    logger.info('Success task log.')
-    time.sleep(1)
+def test_logger() -> None:
+    logger.info('Success test logger.')
 
 
 @app.task()
-def trash_cleaner(clean_old_schedule: bool = True,):
+def trash_cleaner(clean_old_schedule: bool = True,) -> None:
     """
     Clean trash in database: delete unused schedules.
 
@@ -42,7 +41,7 @@ def trash_cleaner(clean_old_schedule: bool = True,):
 @app.task()
 def otlmakejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
                 tws: int = 0, twf: int = 0, sid: int = 999999, ttl: int = 100, timeout: int = 100,
-                username: str = 'admin'):
+                username: str = 'admin') -> None:
     """
     Run the OTL line on a schedule.
 
@@ -78,7 +77,7 @@ def otlmakejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
 
 
 @app.task()
-def bash(filepath: str):
+def bash(filepath: str) -> None:
     """
     Execute bash-scripts
 
@@ -93,27 +92,23 @@ def bash(filepath: str):
         raise FileExistsError("Not file")
     if not os.access(filepath, os.X_OK):
         raise FileExistsError("Can't execute, check permissions")
-    result = subprocess.run(["bash", filepath])
-    print(str(result))
+    process = subprocess.Popen(["bash", filepath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    output, error = process.communicate()
+    logger.info(f'Result: {output.decode()}. \nError: {error.decode()}')
     logger.info(f'Success execute bash-script.')
 
 
 @app.task()
-def commands(*args):
+def commands(*args) -> None:
     """
+    Execute bash commands.
 
     :param args: linux commands, example: ["ls", "-la"]
-    :return:
     """
-    logger.info(f'Get linux commands to execute: {args}')
+    logger.info(f'Get linux commands to execute: {args}.')
     if get_current_user() == 'root':
         raise FileExistsError("Don't start complex_rest with 'root' user")
-    result = subprocess.run(args)
-    logger.info(f'Result: {result}.')
+    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    output, error = process.communicate()
+    logger.info(f'Result: {output.decode()}. \nError: {error.decode()}')
     logger.info(f'Success execute linux commands.')
-
-
-
-
-
-
