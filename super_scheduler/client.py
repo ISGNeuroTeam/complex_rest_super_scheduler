@@ -21,6 +21,7 @@ class SuperScheduler:
     PASSWORD = PASSWORD
 
     logger = logger
+    split_chr = ','
 
     # SCHEDULE_TASK = 'super_scheduler.tasks.otl_makejob'
 
@@ -89,8 +90,8 @@ class SuperScheduler:
                           task: Optional[str],
                           task_name: Optional[str],
                           schedule_parsers: dict,
-                          task_args: Optional[list] = None,
-                          task_kwargs: Optional[dict] = None,
+                          task_args: Optional[str] = None,
+                          task_kwargs: Optional[str] = None,
                           one_off: Optional[bool] = None,
                           required_one_off_schedules: Optional[list[str]] = None) -> dict:
         """
@@ -123,8 +124,10 @@ class SuperScheduler:
         if one_off:
             data['task']['one_off'] = one_off
         if task_args:
+            task_args = task_args.split(cls.split_chr)
             data['task']['args'] = task_args
         if task_kwargs:
+            task_kwargs = task_kwargs.split(cls.split_chr)
             task_kwargs = [kwarg.split('=') for kwarg in task_kwargs]
             task_kwargs = {kwarg[0]: kwarg[-1] for kwarg in task_kwargs}
             data['task']['kwargs'] = task_kwargs
@@ -210,12 +213,12 @@ class SuperScheduler:
                                  help="Task for schedule. Example: \'super_scheduler.tasks.test_logger\'. "
                                       "To see all available tasks use flag '--get'.")
         task_parser.add_argument('-N', '--name', type=str, help='Periodic task (scheduled) name. Must be unique.')
-        task_parser.add_argument('--args', type=str, nargs="*",
+        task_parser.add_argument('--args', type=str,
                                  help="Task args if necessary. Only use with argument '--task'. "
-                                      "Example: '--args value1,value2,value3'")
+                                      "Example: '--args \"value1,value2,value3\"', '--args \"ls,-la\"'")
         task_parser.add_argument('--kwargs', type=str, nargs="*",
                                  help="Task kwargs if necessary. Only use with argument '--task'. "
-                                      "Example: '--kwargs arg1=value1 arg2=value2'")
+                                      "Example: '--kwargs \"arg1=value1,arg2=value2\"'")
         task_parser.add_argument('--one_off', action='store_true', help="Run periodic task only ones. "
                                                                         "Always use with 'clocked' schedule.")
 

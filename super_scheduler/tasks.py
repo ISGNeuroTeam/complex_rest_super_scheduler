@@ -1,5 +1,4 @@
 import super_logger, logging
-import time
 import os
 import requests
 import subprocess
@@ -19,8 +18,8 @@ def get_current_user() -> str:
 
 
 @app.task()
-def test_logger() -> None:
-    logger.info('Success test logger.')
+def logger(msg: str = None) -> None:
+    logger.info(msg)
 
 
 @app.task()
@@ -40,8 +39,8 @@ def trash_cleaner(clean_old_schedule: bool = True,) -> None:
 
 @app.task()
 def otlmakejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
-                tws: int = 0, twf: int = 0, sid: int = 999999, ttl: int = 100, timeout: int = 100,
-                username: str = 'admin') -> None:
+               tws: int = 0, twf: int = 0, sid: int = 999999, ttl: int = 100, timeout: int = 100,
+               username: str = 'admin') -> None:
     """
     Run the OTL line on a schedule.
 
@@ -77,13 +76,13 @@ def otlmakejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
 
 
 @app.task()
-def bash(filepath: str) -> None:
+def script(filepath: str) -> None:
     """
     Execute bash-scripts
 
     :param filepath: path to bash-script
     """
-    logger.info(f'Get bash-script to execute: {filepath}.')
+    logger.info(f'Get bash script to execute: {filepath}.')
     if get_current_user() == 'root':
         raise FileExistsError("Don't start complex_rest with 'root' user")
     if not os.path.exists(filepath):
@@ -92,9 +91,8 @@ def bash(filepath: str) -> None:
         raise FileExistsError("Not file")
     if not os.access(filepath, os.X_OK):
         raise FileExistsError("Can't execute, check permissions")
-    process = subprocess.Popen(["bash", filepath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    output, error = process.communicate()
-    logger.info(f'Result: {output.decode()}. \nError: {error.decode()}')
+    output = subprocess.check_output(["bash", filepath])
+    logger.info(f'Result: {output.decode()}.')
     logger.info(f'Success execute bash-script.')
 
 
