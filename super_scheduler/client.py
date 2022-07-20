@@ -53,7 +53,7 @@ class SuperScheduler:
         raise ValueError("Can't get token")
 
     @classmethod
-    def parse_schedule(cls, schedule_parsers: dict) -> dict:
+    def parse_schedule(cls, schedule_parsers: dict, is_required: bool = True) -> Optional[dict]:
         """
         Return schedule.
 
@@ -68,7 +68,7 @@ class SuperScheduler:
                     crontab_line = crontab_line.split(' ')
                     if len(crontab_line) != 5:
                         raise ValueError("Enter 5 params in crontab line. "
-                                         "Example: '32 18 17,21,29 11 mon,wed', '10 * * * *'")
+                                         "Example: '32 18 mon,wed 17,21,29 * *', '10 * * * *'")
                     schedule_time_params = ('minute', 'hour', 'day_of_week', 'day_of_month', 'month_of_year')
                     for param, value in zip(schedule_time_params, crontab_line):
                         schedule_dict[param] = value
@@ -83,7 +83,9 @@ class SuperScheduler:
                 schedule_dict['name'] = schedule_name
                 preprocess_schedule(schedule_dict)
                 return schedule_dict
-        raise ValueError("No schedule or can't parse it, see documentation and examples")
+        if is_required:
+            raise ValueError("No schedule or can't parse it, see documentation and examples")
+        return schedule_dict
 
     @classmethod
     def data_construction(cls,
@@ -93,7 +95,8 @@ class SuperScheduler:
                           task_args: Optional[str] = None,
                           task_kwargs: Optional[str] = None,
                           one_off: Optional[bool] = None,
-                          required_one_off_schedules: Optional[list[str]] = None) -> dict:
+                          required_one_off_schedules: Optional[list[str]] = None,
+                          is_required_schedule: bool = True) -> dict:
         """
 
         :param task:
@@ -103,11 +106,12 @@ class SuperScheduler:
         :param task_name:
         :param one_off:
         :param required_one_off_schedules:
+        :param is_required_schedule:
         :return:
         """
 
         # schedule
-        schedule_dict = cls.parse_schedule(schedule_parsers)
+        schedule_dict = cls.parse_schedule(schedule_parsers, is_required=is_required_schedule)
         if schedule_dict and required_one_off_schedules and schedule_dict['name'] in required_one_off_schedules:
             one_off = True
 
@@ -324,7 +328,8 @@ def client():
             [] if not args.args else args.args,
             {} if not args.kwargs else args.kwargs,
             args.one_off,
-            required_one_off_schedules
+            required_one_off_schedules,
+            is_required_schedule=True if create else False
         )
         logger.debug("Success data construction")
 
