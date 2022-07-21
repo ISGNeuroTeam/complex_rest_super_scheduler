@@ -290,6 +290,7 @@ def client():
     # auth
     username = args.username
     password = args.password
+    SuperScheduler.USERNAME, SuperScheduler.PASSWORD = username, password
     if (username, password).count(None) > 0:
         raise ValueError("Set both username and password")
     logger.debug("Parsed username & password")
@@ -297,7 +298,7 @@ def client():
     # address
     host = args.host
     port = args.port
-    address = host + ':' + port
+    SuperScheduler.COMPLEX_REST_HOST, SuperScheduler.COMPLEX_REST_PORT = host, port
     logger.debug("Parsed address")
 
     token = SuperScheduler.auth()
