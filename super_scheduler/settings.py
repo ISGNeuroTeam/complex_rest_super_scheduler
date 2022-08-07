@@ -7,7 +7,7 @@ from pathlib import Path
 
 default_ini_config = {
     'logging': {
-        'level': 'INFO'
+        'level': 'DEBUG'
     },
     'db_conf': {
         'host': 'localhost',
@@ -40,9 +40,17 @@ PASSWORD = ini_config['client'].get('password', None) if 'client' in ini_config 
 
 if 'api' not in ini_config:
     raise ValueError("Add [api] in config")
-JOBSMANAGER_TRANSIT_MAKEJOB = ini_config['api'].get('makejob', None) if 'api' in ini_config else None
+JOBSMANAGER_TRANSIT = ini_config['api'].get('jobmanager', None) if 'api' in ini_config else None
 AUTH_URL = ini_config['api'].get('auth', None) if 'api' in ini_config else None
 SUPER_SCHEDULER_URL = ini_config['api'].get('super_scheduler_task', None) if 'api' in ini_config else None
+
+# CELERY
+
+if 'celery' not in ini_config:
+    raise ValueError("Add [celery] in config")
+MAX_RETRIES = int(ini_config['celery'].get('max_retries', '5'))
+RETRY_JITTER = int(ini_config['celery'].get('retry_jitter', '3'))
+MAX_RETRY_BACKOFF = int(ini_config['celery'].get('max_retry_backoff', '300'))
 
 # STATIC SCHEDULES
 

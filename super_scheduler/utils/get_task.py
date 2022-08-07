@@ -19,6 +19,24 @@ def get_all_periodic_task_names() -> list:
     return [periodic_task.name for periodic_task in get_all_periodic_tasks()]
 
 
+def get_all_periodic_task_full():
+    res_p_tasks = {}
+    p_task: PeriodicTask
+    for p_task in get_all_periodic_tasks():
+        tmp_p_task = {'task': p_task.task,
+                      'name': p_task.name,
+                      'args': p_task.args,
+                      'kwargs': p_task.kwargs,
+                      'enabled': p_task.enabled,
+                      'one_off': p_task.one_off,
+                      'date_changed': p_task.date_changed,
+                      'last_run_at': p_task.last_run_at,
+                      'priority': p_task.priority,
+                      'total_run_count': p_task.total_run_count,}
+        res_p_tasks[p_task.name] = tmp_p_task
+    return res_p_tasks
+
+
 def get_all_task_names() -> set:
     """
     Return all task names.

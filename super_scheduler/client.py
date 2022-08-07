@@ -3,8 +3,8 @@ import os
 import json
 import requests
 import sys
-# import pprint
 import logging
+import ast
 from typing import Union, Optional
 
 from settings import COMPLEX_REST_HOST, COMPLEX_REST_PORT, USERNAME, PASSWORD, AUTH_URL, SUPER_SCHEDULER_URL
@@ -29,7 +29,9 @@ class SuperScheduler:
     def pretty_print(cls, data_str2dict: Optional[str] = None,
                      data_dict2dict: Optional[dict] = None):
         if data_str2dict:
+            # print(data_str2dict[2])
             data_dict2dict = json.loads(data_str2dict)
+            # data_dict2dict = ast.literal_eval(data_str2dict)
         if data_dict2dict:
             print(json.dumps(data_dict2dict, indent=4))
 
@@ -95,16 +97,22 @@ class SuperScheduler:
                           task_args: Optional[str] = None,
                           task_kwargs: Optional[str] = None,
                           one_off: Optional[bool] = None,
+                          priority: Optional[int] = None,
+                          enabled: bool = True,
+                          start_time: str = Optional[str],
                           required_one_off_schedules: Optional[list[str]] = None,
                           is_required_schedule: bool = True) -> dict:
         """
 
+        :param start_time:
+        :param enabled:
         :param task:
         :param schedule_parsers:
         :param task_args:
         :param task_kwargs:
         :param task_name:
         :param one_off:
+        :param priority:
         :param required_one_off_schedules:
         :param is_required_schedule:
         :return:
@@ -121,12 +129,17 @@ class SuperScheduler:
                 {
                     'name': task_name,
                     'task': task,
+                    'enabled': enabled,
                 },
             'schedule': schedule_dict,
         }
 
         if one_off:
             data['task']['one_off'] = one_off
+        if priority:
+            data['task']['priority'] = priority
+        if priority:
+            data['task']['start_time'] = start_time
         if task_args:
             task_args = task_args.split(cls.split_chr)
             data['task']['args'] = task_args
@@ -145,12 +158,14 @@ class SuperScheduler:
         headers = {"Authorization": f"Bearer {token}", 'Content-Type': 'application/json'}
         data = json.dumps(data)
         content = None
+        # print(data)
         if post:
             content = requests.post(url, data=data, headers=headers)
         elif delete:
             content = requests.delete(url, data=data, headers=headers)
         elif get:
             content = requests.get(url, data=data, headers=headers)
+            print(content, url, headers)
         if content is not None:
             cls.logger.info(f"Finish request with code {content.status_code}.")
             print("\nResult:")
@@ -223,8 +238,12 @@ class SuperScheduler:
         task_parser.add_argument('--kwargs', type=str, nargs="*",
                                  help="Task kwargs if necessary. Only use with argument '--task'. "
                                       "Example: '--kwargs \"arg1=value1,arg2=value2\"'")
+        task_parser.add_argument('--priority', type=int, help='Periodic task priority from 0 to 255 (integer).')
         task_parser.add_argument('--one_off', action='store_true', help="Run periodic task only ones. "
                                                                         "Always use with 'clocked' schedule.")
+        task_parser.add_argument('--disable', action='store_true', help='Disable task; do not run on schedule')
+        task_parser.add_argument('--start_time', type=str, help='Datetime when the schedule should begin '
+                                                                'triggering the task to run')
 
         return task_parser
 
@@ -322,6 +341,9 @@ def client():
         elif delete and not args.name:
             raise ValueError("Set '--name'")
 
+        # enabled
+        enabled = not args.disable
+
         data = SuperScheduler.data_construction(
             args.task,
             args.name,
@@ -329,6 +351,9 @@ def client():
             [] if not args.args else args.args,
             {} if not args.kwargs else args.kwargs,
             args.one_off,
+            args.priority,
+            enabled,
+            args.start_time,
             required_one_off_schedules,
             is_required_schedule=True if create else False
         )
