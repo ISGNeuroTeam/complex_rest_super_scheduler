@@ -16,7 +16,7 @@ from core.celeryapp import app
 from core.settings.base import REDIS_CONNECTION_STRING
 from .settings import \
     COMPLEX_REST_ADDRESS, JOBSMANAGER_TRANSIT, \
-    MAX_RETRIES, RETRY_JITTER, MAX_RETRY_BACKOFF
+    MAX_RETRIES, RETRY_JITTER, MAX_RETRY_BACKOFF, AUTO_DISABLE
 from .utils.del_schedule import del_unused_schedules
 
 
@@ -44,7 +44,7 @@ def get_task_name_by_class(task_class: celery.Task) -> str:
 def get_periodic_task_names_by_task_name(
         task_name: str,
         args: Optional[list] = None,
-        kwargs: Optional[dict] = None
+        kwargs: Optional[dict] = None,
 ) -> Optional[list]:
     if not args:
         args = []
@@ -70,7 +70,12 @@ class BaseTask(celery.Task):
         return f'Task: {task_name}; args: {args}; kwargs: {kwargs}'
 
     def on_retry(self, exc: str, task_id: str, args: list, kwargs: dict, einfo: str):
-        p_task_names: list = get_periodic_task_names_by_task_name(get_task_name_by_class(self), args)
+        import inspect
+        logger.error(str(inspect.getmembers(self, lambda a: not(inspect.isroutine(a)))))
+        logger.error(str(inspect.getmembers(self.Request, lambda a: not (inspect.isroutine(a)))))
+        logger.error(str(inspect.getmembers(self.app, lambda a: not (inspect.isroutine(a)))))
+        p_task_names: list = get_periodic_task_names_by_task_name(task_name=get_task_name_by_class(self),
+                                                                  args=args)
         if not p_task_names:
             logger.error(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
                          f"and kwargs {kwargs}")
@@ -82,7 +87,7 @@ class BaseTask(celery.Task):
         c['errors_counter'] += 1
         logger.error('Exception text: ' + str(exc))
         logger.error(f"Errors number in tasks '{p_task_names}': {str(c['errors_counter'])}")
-        if c['errors_counter'] > self.MAX_ERROR_COUNTER:
+        if AUTO_DISABLE and c['errors_counter'] > self.MAX_ERROR_COUNTER:
             logger.error(f"Too many errors. Disable {unique_task_name}.")
             for p_task_name in p_task_names:
                 p_task = PeriodicTask.objects.get(name=p_task_name)

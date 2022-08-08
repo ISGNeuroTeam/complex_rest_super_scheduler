@@ -51,6 +51,7 @@ if 'celery' not in ini_config:
 MAX_RETRIES = int(ini_config['celery'].get('max_retries', '5'))
 RETRY_JITTER = int(ini_config['celery'].get('retry_jitter', '3'))
 MAX_RETRY_BACKOFF = int(ini_config['celery'].get('max_retry_backoff', '300'))
+AUTO_DISABLE = bool(ini_config['celery'].get('auto-disable', 'False'))
 
 # STATIC SCHEDULES
 
