@@ -1,4 +1,4 @@
-from pydantic import validator
+from pydantic import validator, root_validator
 from typing import Optional
 import json
 import datetime
@@ -10,6 +10,18 @@ from core.settings.base import TIME_ZONE
 
 from ..utils.get_task import get_all_periodic_task_names, get_all_task_names
 from ..utils.kwargs_parser import BaseFormat as BaseTaskParserFormat
+
+
+def add_name_to_kwargs(kwargs: dict, p_name: str) -> dict:
+    """
+    Need for auto-deleting.
+
+    :param kwargs:
+    :param p_name:
+    :return:
+    """
+    kwargs['name'] = p_name
+    return kwargs
 
 
 class TaskCreateFormat(BaseTaskParserFormat):
@@ -34,6 +46,14 @@ class TaskCreateFormat(BaseTaskParserFormat):
             raise ValueError(f"Duplicate periodic task name {value}")
         return value
 
+    @root_validator(pre=True)
+    def add_name_in_kwargs(cls, values):
+        # name, kwargs = values.get('name'), values.get('kwargs')
+        if not 'kwargs' in values:
+            values['kwargs'] = {}
+        values['kwargs']['name'] = values.get('name')
+        return values
+
     @validator('task')
     def task_exist(cls, value: str) -> str:
         """
@@ -44,16 +64,16 @@ class TaskCreateFormat(BaseTaskParserFormat):
         return value
 
     @validator('args')
-    def args_transform(cls, value: str) -> str:
+    def args_transform(cls, value: list) -> str:
         """
         Transform args to correct Django format - string.
         """
         return json.dumps(value)
 
     @validator('kwargs')
-    def kwargs_transform(cls, value: str) -> str:
+    def kwargs_transform(cls, value: dict) -> str:
         """
-        Transform kwargs to correct Django format - string.
+        Add periodic task name and transform kwargs to correct Django format - string.
         """
         return json.dumps(value)
 

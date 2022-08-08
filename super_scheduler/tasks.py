@@ -7,7 +7,7 @@ from typing import Optional
 import celery
 from redis import Redis
 from pottery import RedisCounter
-from django_celery_beat.models import PeriodicTask, PeriodicTasks
+from django_celery_beat.models import PeriodicTask
 
 import requests
 from requests.exceptions import RequestException
@@ -61,6 +61,10 @@ def get_periodic_task_names_by_task_name(
     return p_task_names if p_task_names else None
 
 
+def get_periodic_task_names_by_task_kwargs(task_kwargs: dict) -> Optional[str]:
+    return task_kwargs.get('name', None)
+
+
 class BaseTask(celery.Task):
 
     MAX_ERROR_COUNTER = MAX_RETRIES
@@ -70,17 +74,21 @@ class BaseTask(celery.Task):
         return f'Task: {task_name}; args: {args}; kwargs: {kwargs}'
 
     def on_retry(self, exc: str, task_id: str, args: list, kwargs: dict, einfo: str):
-        import inspect
-        logger.error(str(inspect.getmembers(self, lambda a: not(inspect.isroutine(a)))))
-        logger.error(str(inspect.getmembers(self.Request, lambda a: not (inspect.isroutine(a)))))
-        logger.error(str(inspect.getmembers(self.app, lambda a: not (inspect.isroutine(a)))))
-        p_task_names: list = get_periodic_task_names_by_task_name(task_name=get_task_name_by_class(self),
-                                                                  args=args)
+        # logger.error('kwargs: ' + str(kwargs))
+        p_task_name = get_periodic_task_names_by_task_kwargs(kwargs)
+        # logger.error('p_task_name: ' + str(p_task_name))
+        if p_task_name:
+            p_task_names = [p_task_name]
+        else:
+            p_task_names: list = get_periodic_task_names_by_task_name(task_name=get_task_name_by_class(self),
+                                                                      args=args)
+        # logger.error('p_task_names: ' + str(p_task_names))
         if not p_task_names:
             logger.error(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
                          f"and kwargs {kwargs}")
             raise ValueError(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
                              f"and kwargs {kwargs}")
+
         unique_task_name = self._create_unique_task_name(args, kwargs)
         redis = Redis.from_url(REDIS_CONNECTION_STRING)
         c = RedisCounter(redis=redis, key=unique_task_name)
@@ -140,7 +148,7 @@ def trash_cleaner(self, clean_old_schedule: bool = True,) -> None:
 )
 def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
                tws: int = 0, twf: int = 0, sid: Optional[str] = None, ttl: int = 100, timeout: int = 100,
-               username: str = 'admin') -> None:
+               username: str = 'admin', **kwargs) -> None:
     """
     Run the OTL line on a schedule.
     For task.request: https://docs.celeryq.dev/en/stable/userguide/tasks.html#task-request-info.

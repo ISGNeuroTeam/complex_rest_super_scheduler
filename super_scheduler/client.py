@@ -235,7 +235,7 @@ class SuperScheduler:
         task_parser.add_argument('--args', type=str,
                                  help="Task args if necessary. Only use with argument '--task'. "
                                       "Example: '--args \"value1,value2,value3\"', '--args \"ls,-la\"'")
-        task_parser.add_argument('--kwargs', type=str, nargs="*",
+        task_parser.add_argument('--kwargs', type=str,
                                  help="Task kwargs if necessary. Only use with argument '--task'. "
                                       "Example: '--kwargs \"arg1=value1,arg2=value2\"'")
         task_parser.add_argument('--priority', type=int, help='Periodic task priority from 0 to 255 (integer).')

@@ -11,7 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - New fields in config
  - Base celery task
  - Retries functional
- - Auto disabling task after many fails
+ - Auto disabling task after many fails 2 ways:
+   - match task, args and kwargs, then disable ones
+   - save in kwargs periodic task name and use it for disabling (add in format validating)
  - Timeouts after fails and tasks trash cleaning
 
 ### Updated
