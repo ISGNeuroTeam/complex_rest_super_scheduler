@@ -74,15 +74,18 @@ class BaseTask(celery.Task):
         return f'Task: {task_name}; args: {args}; kwargs: {kwargs}'
 
     def on_retry(self, exc: str, task_id: str, args: list, kwargs: dict, einfo: str):
-        # logger.error('kwargs: ' + str(kwargs))
+
         p_task_name = get_periodic_task_names_by_task_kwargs(kwargs)
-        # logger.error('p_task_name: ' + str(p_task_name))
+
         if p_task_name:
             p_task_names = [p_task_name]
+            logger.info(f'Found periodic task name in kwargs: {p_task_names}')
         else:
             p_task_names: list = get_periodic_task_names_by_task_name(task_name=get_task_name_by_class(self),
                                                                       args=args)
-        # logger.error('p_task_names: ' + str(p_task_names))
+            logger.info(f'Found periodic task name with task {get_task_name_by_class(self)}, '
+                        f'args {args} and kwargs {kwargs}')
+
         if not p_task_names:
             logger.error(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
                          f"and kwargs {kwargs}")
@@ -90,17 +93,23 @@ class BaseTask(celery.Task):
                              f"and kwargs {kwargs}")
 
         unique_task_name = self._create_unique_task_name(args, kwargs)
+
         redis = Redis.from_url(REDIS_CONNECTION_STRING)
         c = RedisCounter(redis=redis, key=unique_task_name)
         c['errors_counter'] += 1
-        logger.error('Exception text: ' + str(exc))
-        logger.error(f"Errors number in tasks '{p_task_names}': {str(c['errors_counter'])}")
+
+        logger.error(f'Exception message: {exc}')
+        logger.error(f"Total errors with task {p_task_names}: {c['errors_counter']}")
+
         if AUTO_DISABLE and c['errors_counter'] > self.MAX_ERROR_COUNTER:
+
             logger.error(f"Too many errors. Disable {unique_task_name}.")
+
             for p_task_name in p_task_names:
                 p_task = PeriodicTask.objects.get(name=p_task_name)
                 p_task.enabled = False
                 p_task.save()
+
             c['errors_counter'] = 0
 
     def on_success(self, retval, task_id: str, args: list, kwargs: dict):
@@ -166,7 +175,13 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
 
     """
 
-    def send_post_request_content_status(_url, _data, post=False, get=False) -> (requests.Response, Optional[str]):
+    def request_error(content):
+        logger.error(f'{sid} Content text: {content.text}.')
+        logger.error(f'{sid} Status code: {content.status_code}.')
+        raise RequestException
+
+    def send_post_request_content_status(_url, _data, post=False, get=False) -> \
+            (requests.Response, Optional[str]):
         if post:
             content = requests.post(_url, data=_data)
         elif get:
@@ -182,9 +197,7 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
         content, job_status = send_post_request_content_status(makejob_url, data, post=True)
 
         if content.status_code != 200:
-            logger.error(f'{sid} Content text: {content.text}.')
-            logger.error(f'{sid} Status code: {content.status_code}.')
-            raise RequestException
+            request_error(content)
 
         logger.info(f'{sid} Created job.')
         return content
@@ -203,15 +216,24 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
                 raise TimeoutError
 
         if content.status_code != 200:
-            logger.error(f'{sid} Content text: {content.text}.')
-            logger.error(f'{sid} Status code: {content.status_code}.')
-            raise RequestException
+            request_error(content)
 
         logger.info(f'{sid} Checked job.')
         return content
 
+    def getresult() -> requests.Response:
+
+        logger.info(f'{sid} Sending request on url: {getresult_url}.')
+
+        content, job_status = send_post_request_content_status(getresult_url, data, get=True)
+
+        if content.status_code != 200:
+            request_error(content)
+
+        logger.info(f'{sid} Get result job.')
+        return content
+
     sid = sid if sid else str(self.request.id)
-    # sid = sid if sid else str(uuid.uuid4())
 
     if not JOBSMANAGER_TRANSIT:
         logger.error("Add plugin jobsmanager.")
@@ -220,6 +242,7 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
     base_url = f'http://{complex_rest_address}/{JOBSMANAGER_TRANSIT}'
     makejob_url = base_url + '/makejob'
     checkjob_url = base_url + '/checkjob'
+    getresult_url = base_url + '/getresult'
 
     data = {'sid': sid,
             'original_otl': f'{otl} |head 1000',
@@ -232,15 +255,14 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
             'timeout': timeout}
 
     # make job
-    makejob()
+    content = makejob()
 
     # check job; wait finish
-    checkjob()
+    content = checkjob()
 
     # get job
+    # content = getresult()
 
-    # logger.info(f'{sid} Calculated OTL line with content: {content.text}')
-    # logger.info(f'{sid} Calculated OTL line with content: {content.status_code}')
     logger.info(f'{sid} Finished task: {self.request.id}.')
 
 

@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Add
- - New args: priority, start_time
+ - New args: priority, start_time, expires
  - New flags: disable
  - New fields in config
  - Base celery task
@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Auto disabling task after many fails 2 ways:
    - match task, args and kwargs, then disable ones
    - save in kwargs periodic task name and use it for disabling (add in format validating)
- - Timeouts after fails and tasks trash cleaning
+ - Add timeouts after task fails and task trash cleaning
 
 ### Updated
  - Updated printing and logging

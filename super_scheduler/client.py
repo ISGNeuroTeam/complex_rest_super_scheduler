@@ -29,9 +29,7 @@ class SuperScheduler:
     def pretty_print(cls, data_str2dict: Optional[str] = None,
                      data_dict2dict: Optional[dict] = None):
         if data_str2dict:
-            # print(data_str2dict[2])
             data_dict2dict = json.loads(data_str2dict)
-            # data_dict2dict = ast.literal_eval(data_str2dict)
         if data_dict2dict:
             print(json.dumps(data_dict2dict, indent=4))
 
@@ -100,10 +98,12 @@ class SuperScheduler:
                           priority: Optional[int] = None,
                           enabled: bool = True,
                           start_time: str = Optional[str],
+                          expires: str = Optional[str],
                           required_one_off_schedules: Optional[list[str]] = None,
                           is_required_schedule: bool = True) -> dict:
         """
 
+        :param expires:
         :param start_time:
         :param enabled:
         :param task:
@@ -140,6 +140,8 @@ class SuperScheduler:
             data['task']['priority'] = priority
         if priority:
             data['task']['start_time'] = start_time
+        if priority:
+            data['task']['expires'] = expires
         if task_args:
             task_args = task_args.split(cls.split_chr)
             data['task']['args'] = task_args
@@ -241,9 +243,11 @@ class SuperScheduler:
         task_parser.add_argument('--priority', type=int, help='Periodic task priority from 0 to 255 (integer).')
         task_parser.add_argument('--one_off', action='store_true', help="Run periodic task only ones. "
                                                                         "Always use with 'clocked' schedule.")
-        task_parser.add_argument('--disable', action='store_true', help='Disable task; do not run on schedule')
+        task_parser.add_argument('--disable', action='store_true', help='Disable task and do not run on schedule')
         task_parser.add_argument('--start_time', type=str, help='Datetime when the schedule should begin '
                                                                 'triggering the task to run')
+        task_parser.add_argument('--expires', type=str, help='Datetime after which the schedule will no longer '
+                                                             'trigger the task to run')
 
         return task_parser
 
@@ -354,6 +358,7 @@ def client():
             args.priority,
             enabled,
             args.start_time,
+            args.expires,
             required_one_off_schedules,
             is_required_schedule=True if create else False
         )

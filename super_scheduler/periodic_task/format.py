@@ -36,6 +36,7 @@ class TaskCreateFormat(BaseTaskParserFormat):
     priority: Optional[int] = None
     enabled: bool = True
     start_time: Optional[str] = None
+    expires: Optional[str] = None
 
     @validator('name')
     def name_validator(cls, value: str) -> str:
@@ -97,6 +98,18 @@ class TaskCreateFormat(BaseTaskParserFormat):
             value = parse(value, tzinfos={"PST": tzinfo, "PDT": tzinfo})
         except Exception as e:
             raise ValueError(f"Not correct 'start_time' param. Error: {e}")
+        return json.dumps(value)
+
+    @validator("expires")
+    def expires_transform(cls, value: str) -> str:
+        """
+        Parse & transform expires to correct Django format - string.
+        """
+        try:
+            tzinfo = gettz(TIME_ZONE)
+            value = parse(value, tzinfos={"PST": tzinfo, "PDT": tzinfo})
+        except Exception as e:
+            raise ValueError(f"Not correct 'expires' param. Error: {e}")
         return json.dumps(value)
 
 

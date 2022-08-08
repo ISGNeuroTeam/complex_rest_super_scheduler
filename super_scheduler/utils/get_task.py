@@ -29,10 +29,12 @@ def get_all_periodic_task_full():
                       'kwargs': p_task.kwargs,
                       'enabled': p_task.enabled,
                       'one_off': p_task.one_off,
-                      'date_changed': p_task.date_changed,
-                      'last_run_at': p_task.last_run_at,
                       'priority': p_task.priority,
-                      'total_run_count': p_task.total_run_count,}
+                      'total_run_count': p_task.total_run_count,
+                      'start_time': p_task.start_time,
+                      'expires': p_task.expires,
+                      'date_changed': p_task.date_changed,
+                      'last_run_at': p_task.last_run_at,}
         res_p_tasks[p_task.name] = tmp_p_task
     return res_p_tasks
 
