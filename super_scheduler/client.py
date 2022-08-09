@@ -1,13 +1,17 @@
 import argparse
-import os
 import json
 import requests
 import sys
 import logging
-import ast
-from typing import Union, Optional
+from typing import Union, Optional, Tuple
+from rest_framework import serializers
+
+import pydantic
+from pydantic import Field
+from pydantic import validator, root_validator, BaseModel
 
 from settings import COMPLEX_REST_HOST, COMPLEX_REST_PORT, USERNAME, PASSWORD, AUTH_URL, SUPER_SCHEDULER_URL
+
 
 logger = logging.getLogger("super_scheduler")
 
@@ -25,6 +29,18 @@ class SuperScheduler:
 
     # SCHEDULE_TASK = 'super_scheduler.tasks.otl_makejob'
 
+    def __init__(self):
+        self.token = None
+        self.data = None
+
+    @property
+    def address(self) -> str:
+        return self.COMPLEX_REST_HOST + ':' + self.COMPLEX_REST_PORT
+
+    @property
+    def header(self) -> Optional[dict]:
+        return {"Authorization": f"Bearer {self.token}", 'Content-Type': 'application/json'}
+
     @classmethod
     def pretty_print(cls, data_str2dict: Optional[str] = None,
                      data_dict2dict: Optional[dict] = None):
@@ -33,340 +49,551 @@ class SuperScheduler:
         if data_dict2dict:
             print(json.dumps(data_dict2dict, indent=4))
 
-    @classmethod
-    def auth(cls) -> str:
-        address = cls.COMPLEX_REST_HOST + ':' + cls.COMPLEX_REST_PORT
-        url = f'http://{address}/{cls.AUTH_URL}'
-
-        data = {
-            'login': cls.USERNAME,
-            'password': cls.PASSWORD
-        }
-
-        content = requests.post(url, data=data)
-
-        if content.status_code == 200:
-            token = content.json()['token']
-            return token
-
-        cls.logger.debug(f"{content.status_code}, {content.text}")
-        raise ValueError("Can't get token")
-
-    @classmethod
-    def parse_schedule(cls, schedule_parsers: dict, is_required: bool = True) -> Optional[dict]:
+    def send_request(self, data: dict, url: str, post: bool = False, delete: bool = False, get: bool = False) -> \
+            Tuple[requests.models.Response, int]:
         """
-        Return schedule.
+        Send request to url with data.
 
-        :param schedule_parsers: schedule parsers
-        :return: schedule
-        """
-
-        def preprocess_schedule(schedule_dict):
-            if schedule_dict['name'] == 'crontab':
-                if 'crontab_line' in schedule_dict and schedule_dict['crontab_line']:
-                    crontab_line = schedule_dict['crontab_line']
-                    crontab_line = crontab_line.split(' ')
-                    if len(crontab_line) != 5:
-                        raise ValueError("Enter 5 params in crontab line. "
-                                         "Example: '32 18 mon,wed 17,21,29 * *', '10 * * * *'")
-                    schedule_time_params = ('minute', 'hour', 'day_of_week', 'day_of_month', 'month_of_year')
-                    for param, value in zip(schedule_time_params, crontab_line):
-                        schedule_dict[param] = value
-            return schedule_dict
-
-        schedule_dict = None
-        for schedule_name in schedule_parsers:
-            if schedule_name in sys.argv[1:]:
-                if schedule_dict is not None:
-                    raise ValueError("Use only one schedule type!")
-                schedule_dict = schedule_parsers[schedule_name].parse_known_args()[0].__dict__
-                schedule_dict['name'] = schedule_name
-                preprocess_schedule(schedule_dict)
-                return schedule_dict
-        if is_required:
-            raise ValueError("No schedule or can't parse it, see documentation and examples")
-        return schedule_dict
-
-    @classmethod
-    def data_construction(cls,
-                          task: Optional[str],
-                          task_name: Optional[str],
-                          schedule_parsers: dict,
-                          task_args: Optional[str] = None,
-                          task_kwargs: Optional[str] = None,
-                          one_off: Optional[bool] = None,
-                          priority: Optional[int] = None,
-                          enabled: bool = True,
-                          start_time: str = Optional[str],
-                          expires: str = Optional[str],
-                          required_one_off_schedules: Optional[list[str]] = None,
-                          is_required_schedule: bool = True) -> dict:
-        """
-
-        :param expires:
-        :param start_time:
-        :param enabled:
-        :param task:
-        :param schedule_parsers:
-        :param task_args:
-        :param task_kwargs:
-        :param task_name:
-        :param one_off:
-        :param priority:
-        :param required_one_off_schedules:
-        :param is_required_schedule:
+        :param data:
+        :param url:
+        :param post:
+        :param delete:
+        :param get:
         :return:
         """
+        data = json.dumps(data)
+        if post:
+            content = requests.post(url, data=data, headers=self.header)
+        elif delete:
+            content = requests.delete(url, data=data, headers=self.header)
+        elif get:
+            content = requests.get(url, data=data, headers=self.header)
+        else:
+            content = None
 
-        # schedule
-        schedule_dict = cls.parse_schedule(schedule_parsers, is_required=is_required_schedule)
-        if schedule_dict and required_one_off_schedules and schedule_dict['name'] in required_one_off_schedules:
-            one_off = True
+        return content, content.status_code
 
-        # construct data
-        data = {
-            'task':
-                {
-                    'name': task_name,
-                    'task': task,
-                    'enabled': enabled,
-                },
-            'schedule': schedule_dict,
+    def auth(self) -> str:
+
+        self.data = {
+            'login': self.USERNAME,
+            'password': self.PASSWORD
         }
+        url = f'http://{self.address}/{self.AUTH_URL}'
+        content, status_code = self.send_request(url=url, data=self.data, post=True)
 
-        if one_off:
-            data['task']['one_off'] = one_off
-        if priority:
-            data['task']['priority'] = priority
-        if priority:
-            data['task']['start_time'] = start_time
-        if priority:
-            data['task']['expires'] = expires
-        if task_args:
-            task_args = task_args.split(cls.split_chr)
-            data['task']['args'] = task_args
-        if task_kwargs:
-            task_kwargs = task_kwargs.split(cls.split_chr)
-            task_kwargs = [kwarg.split('=') for kwarg in task_kwargs]
-            task_kwargs = {kwarg[0]: kwarg[-1] for kwarg in task_kwargs}
-            data['task']['kwargs'] = task_kwargs
+        if status_code == 200:
+            token = content.json()['token']
+            self.token = token
+            return token
 
+        self.logger.debug(f"Can't get token; {status_code}, {content.text}")
+        raise ValueError("Can't get token")
+
+    def new_data_construction(self,
+                              task_args: dict, schedule_args: dict,
+                              required_one_off_schedules: Optional[list[str]] = None,):
+        if schedule_args.get('name') and schedule_args['name'] in required_one_off_schedules:
+            task_args['one_off'] = True
+        data = {
+            'task': task_args,
+            'schedule': schedule_args,
+        }
+        self.data = data
         return data
 
-    @classmethod
-    def send_request(cls, data, token, post: bool = False, delete: bool = False, get: bool = False):
-        address = cls.COMPLEX_REST_HOST + ':' + cls.COMPLEX_REST_PORT
-        url = f'http://{address}/{cls.SUPER_SCHEDULER_URL}'
-        headers = {"Authorization": f"Bearer {token}", 'Content-Type': 'application/json'}
-        data = json.dumps(data)
-        content = None
-        # print(data)
-        if post:
-            content = requests.post(url, data=data, headers=headers)
-        elif delete:
-            content = requests.delete(url, data=data, headers=headers)
-        elif get:
-            content = requests.get(url, data=data, headers=headers)
-            print(content, url, headers)
+    def send_request_to_super_scheduler(self, post: bool = False, delete: bool = False, get: bool = False):
+        url = f'http://{self.address}/{self.SUPER_SCHEDULER_URL}'
+        content, status_code = self.send_request(url=url, data=self.data, post=post, delete=delete, get=get)
+
         if content is not None:
-            cls.logger.info(f"Finish request with code {content.status_code}.")
+            self.logger.info(f"Finish request with code {content.status_code}.")
             print("\nResult:")
             if isinstance(content.text, str):
-                cls.pretty_print(data_str2dict=content.text)
+                self.pretty_print(data_str2dict=content.text)
             else:
                 print(content.text)
             return content.status_code
+
         else:
             raise ValueError("Finish request without content")
 
+
+class ConfigFormat(BaseModel):
+    # config
+    username: str = Field(
+        default=USERNAME,
+        description="username for login in django admin panel",
+        example="--username test_user_1"
+    )
+    password: str = Field(
+        default=PASSWORD,
+        description="password for login in django admin panel",
+        example="--password 12345678"
+    )
+    host: str = Field(
+        default=COMPLEX_REST_HOST,
+        description="host complex_rest",
+        example="--host 192.168.0.1"
+    )
+    port: str = Field(
+        default=COMPLEX_REST_PORT,
+        description="port complex_rest",
+        example="--port 8080"
+    )
+
+    @validator('username', 'password', 'host', 'port', pre=True)
+    def field_str_validator(cls, value, field):
+        field: pydantic.fields.ModelField
+        field_name = field.name
+        field_type = field.type_
+        if isinstance(value, (list, tuple)):
+            if len(value) != 1:
+                raise ValueError(f"Set only one '{field_name}' argument: '--{field_name} \"smth...\"'")
+            value = field_type(value[0])
+        return value
+
+
+class ActionFormat(BaseModel):
+    # action
+    create: bool = Field(
+        description="flag for creating task",
+        example="--create"
+    )
+    delete: bool = Field(
+        description="flag for deleting task",
+        example="--delete"
+    )
+    get: bool = Field(
+        description="flag for getting task",
+        example="--get"
+    )
+
+    @root_validator(pre=True)
+    def action_validator(cls, values):
+        keys = ['create', 'delete', 'get']
+        for key in keys:
+            values[key] = True if key in values else False
+        if sum([values.get(key) for key in keys]) != 1:
+            raise ValueError("Set only one flag '--create', '--delete' or '--get'")
+
+        return values
+
+
+class TaskGetFormat(BaseModel):
+    pass
+
+
+class TaskDeleteFormat(BaseModel):
+
+    # task
+    name: str = Field(
+        description="periodic task name",
+        example="--name my_first_task"
+    )
+
+    @validator('name', pre=True)
+    def name_validator(cls, value):
+        if isinstance(value, (list, tuple)):
+            if len(value) != 1:
+                raise ValueError(f"Set only one 'name' argument: '--name \"testname\"'")
+            value = str(value[0])
+        return value
+
+
+class TaskCreateFormat(TaskDeleteFormat):
+
+    # task
+    task: str = Field(
+        description="function name",
+        example="--task super_scheduler.tasks.otlmakejob"
+    )
+    args: list = Field(
+        default=[],
+        description="args for periodic task",
+        example="--args \"| otstats index=test\" \"| makeresults\""
+    )
+    kwargs: dict = Field(
+        default={},
+        description="kwargs for periodic task, use rarely",
+        example="--kwargs \"key1=value1\" \"key2=value2\""
+    )
+    priority: Optional[int] = Field(
+        default=None,
+        description="periodic task priority, min priority - 0, max priority - 255",
+        example="--priority 10"
+    )
+    one_off: bool = Field(
+        default=False,
+        description="flag, run task only ones; always use with 'clocked' schedule",
+        example="--one_off"
+    )
+    disable: bool = Field(
+        default=False,
+        description="flag, disable task and do not run on schedule",
+        example="--disable"
+    )
+    start_time: Optional[str] = Field(
+        default=None,
+        description="datetime when the schedule should begin triggering the task to run",
+        example="--start_time \"2023-11-28 01:01:01\""
+    )
+    expires: Optional[str] = Field(
+        default=None,
+        description="datetime after which the schedule will no longer trigger the task to run",
+        example="--expires \"2025-11-28 12:10:50.001\""
+    )
+
+    @validator('task', 'priority', 'start_time', 'expires', pre=True)
+    def fields_validator(cls, value, field):
+        field: pydantic.fields.ModelField
+        field_name = field.name
+        field_type = field.type_
+        if isinstance(value, (list, tuple)):
+            if len(value) != 1:
+                raise ValueError(f"Set only one '{field_name}' argument: '--{field_name} \"smth...\"'")
+            value = field_type(value[0])
+        return value
+
+    @validator('kwargs', pre=True)
+    def kwargs_validator(cls, value):
+        kwargs = {}
+        for arg in value:
+            tmp_arg_list = arg.split('=')
+            key, value = tmp_arg_list[0], tmp_arg_list[-1]
+            kwargs[key] = value
+        return kwargs
+
+    @validator('one_off', 'disable', pre=True)
+    def flag_validator(cls, value, field):
+        field: pydantic.fields.ModelField
+        field_name = field.name
+        if isinstance(value, (list, tuple)):
+            if len(value) != 0:
+                raise ValueError(f"Set only '{field_name}' flag: '--{field_name}'")
+            value = True
+        return value
+
+
+class ScheduleFormat(BaseModel):
+    # action
+    crontab: bool = Field(
+        description="flag for crontab schedule",
+        example="--crontab"
+    )
+    clocked: bool = Field(
+        description="flag for clocked schedule",
+        example="--clocked"
+    )
+    interval: bool = Field(
+        description="flag for interval schedule",
+        example="--interval"
+    )
+    solar: bool = Field(
+        description="flag for solar schedule",
+        example="--solar"
+    )
+
+    @root_validator(pre=True)
+    def schedule_validator(cls, values):
+        keys = ['crontab', 'clocked', 'interval', 'solar']
+        for key in keys:
+            values[key] = True if key in values else False
+        if sum([values.get(key) for key in keys]) != 1:
+            raise ValueError("Set only one flag '--crontab', '--clocked', '--interval' or '--solar'")
+
+        return values
+
+
+class CrontabScheduleFormat(BaseModel):
+
+    # schedule
+    minute: str = Field(
+        default="*",
+        description="minute",
+        example="--minute 50"
+    )
+    hour: str = Field(
+        default="*",
+        description="hour",
+        example="--hour 10"
+    )
+    day_of_week: str = Field(
+        default="*",
+        description="day of week",
+        example="--day_of_week mon,wed"
+    )
+    day_of_month: str = Field(
+        default="*",
+        description="day of month",
+        example="--day_of_month 17,20"
+    )
+    month_of_year: str = Field(
+        default="*",
+        description="month of year",
+        example="--month_of_year 1,3"
+    )
+    crontab_line: Optional[str] = Field(
+        default=None,
+        description="crontab line",
+        example="--crontab_line \"32 18 mon,wed 17,21,29 *\""
+    )
+
+    @validator('minute', 'hour', 'day_of_week', 'day_of_month', 'month_of_year', 'crontab_line', pre=True)
+    def time_range_validator(cls, value, field):
+        field: pydantic.fields.ModelField
+        field_name = field.name
+        field_type = field.type_
+        if isinstance(value, (list, tuple)):
+            if len(value) != 1:
+                raise ValueError(f"Set only one '{field_name}' argument: '--{field_name} \"smth...\"'")
+            value = field_type(value[0])
+        return value
+
+    @root_validator()
+    def transform_crontab_line(cls, values):
+        if not values.get('crontab_line'):
+            return values
+        crontab_line = values['crontab_line']
+        crontab_line = crontab_line.split(' ')
+        if len(crontab_line) != 5:
+            raise ValueError(f"Enter 5 params in crontab line. Got {crontab_line} "
+                             "Example: '32 18 mon,wed 17,21,29 * *', '10 * * * *'")
+        schedule_time_params = ('minute', 'hour', 'day_of_week', 'day_of_month', 'month_of_year')
+        for param, value in zip(schedule_time_params, crontab_line):
+            values[param] = value
+        return values
+
+
+class ClockedScheduleFormat(BaseModel):
+
+    # schedule
+    clocked_time: str = Field(
+        description="datetime string",
+        example="--clocked_time \"2023-11-28 01:01:01\""
+    )
+
+    @validator('clocked_time', pre=True)
+    def time_range_validator(cls, value, field):
+        field: pydantic.fields.ModelField
+        field_name = field.name
+        field_type = field.type_
+        if isinstance(value, (list, tuple)):
+            if len(value) != 1:
+                raise ValueError(f"Set only one '{field_name}' argument: '--{field_name} \"smth...\"'")
+            value = field_type(value[0])
+        return value
+
+
+class IntervalScheduleFormat(BaseModel):
+
+    # schedule
+    every: int = Field(
+        description="run every N * time range",
+        example="--every 10"
+    )
+    period: str = Field(
+        description="time range",
+        example="--period minutes"
+    )
+
+    @validator('every', 'period', pre=True)
+    def time_range_validator(cls, value, field):
+        field: pydantic.fields.ModelField
+        field_name = field.name
+        field_type = field.type_
+        if isinstance(value, (list, tuple)):
+            if len(value) != 1:
+                raise ValueError(f"Set only one '{field_name}' argument: '--{field_name} \"smth...\"'")
+            value = field_type(value[0])
+        return value
+
+
+class SolarScheduleFormat(BaseModel):
+
+    # schedule
+    event: str = Field(
+        description="solar events; available: 'dawn_astronomical', 'dawn_nautical', 'dawn_civil', 'sunrise', "
+                    "'solar_noon', 'sunset', 'dusk_civil', 'dusk_nautical', 'dusk_astronomical'; "
+                    "for more info: https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html#solar-schedules",
+        example="--event dawn_astronomical"
+    )
+    latitude: float = Field(
+        description="current latitude; value must be between -180 and 180",
+        example="--latitude 55.6"
+    )
+    longitude: float = Field(
+        description="current longitude; value must be between -180 and 180",
+        example="--longitude 150.01"
+    )
+
+    @validator('event', 'latitude', 'longitude', pre=True)
+    def time_range_validator(cls, value, field):
+        field: pydantic.fields.ModelField
+        field_name = field.name
+        field_type = field.type_
+        if isinstance(value, (list, tuple)):
+            if len(value) != 1:
+                raise ValueError(f"Set only one '{field_name}' argument: '--{field_name} \"smth...\"'")
+            value = field_type(value[0])
+        return value
+
+
+class ArgParser:
+
+    HELP_FLAGS: set = {'-h', '--help'}
+    ARG_PARSER_FORMATS = {
+        'config': ConfigFormat,
+        'action': ActionFormat,
+        'task (create)': TaskCreateFormat,
+        'task (delete)': TaskDeleteFormat,
+        'task (get)': TaskGetFormat,
+        'schedule': ScheduleFormat,
+        'schedule (crontab)': CrontabScheduleFormat,
+        'schedule (clocked)': ClockedScheduleFormat,
+        'schedule (interval)': IntervalScheduleFormat,
+        'schedule (solar)': SolarScheduleFormat,
+    }
+
+    def __init__(self):
+        self.args = sys.argv[1:]
+        self.args_set = set(self.args)
+
+    def check_help_flag(self) -> bool:
+        return any(self.HELP_FLAGS.intersection(self.args_set))
+
+    def group_args(self) -> dict:
+
+        result = {}
+        key_arg = None
+
+        for arg in self.args:
+            if arg[:2] == '--':
+                key_arg = arg[2:]
+                result[key_arg] = []
+            elif key_arg is not None:
+                result[key_arg] += [arg]
+
+        return result
+
+    def _filter_none_task_args(self, task_args: dict):
+        keys = list(task_args.keys())
+        for key in keys:
+            if task_args[key] is None:
+                del task_args[key]
+        return task_args
+
+    def parse(self) -> Tuple[dict, dict, dict, dict]:
+        if self.check_help_flag():
+            DocGenerator.generate()
+            exit(0)
+
+        group_args = self.group_args()
+
+        config_args = self.ARG_PARSER_FORMATS['config'](**group_args).dict()
+        # print(dict(config_args))
+
+        action_args = self.ARG_PARSER_FORMATS['action'](**group_args).dict()
+        # print(action_args)
+
+        task_args = {}
+        for key, key_format in zip(('create', 'delete', 'get'), ('task (create)', 'task (delete)', 'task (get)')):
+            if action_args[key]:
+                task_args = self.ARG_PARSER_FORMATS[key_format](**group_args).dict()
+                break
+        self._filter_none_task_args(task_args)
+        # print(task_args)
+
+        schedule_args = {}
+        if action_args['create']:
+            schedule_types = self.ARG_PARSER_FORMATS['schedule'](**group_args).dict()
+            # print(schedule_types)
+
+            schedule_type = [key for key, value in schedule_types.items() if value is True][0]
+            # print(schedule_type)
+
+            schedule_args = self.ARG_PARSER_FORMATS[f'schedule ({schedule_type})'](**group_args).dict()
+            schedule_args['name'] = schedule_type  # for recognition schedule in super_scheduler format validator
+            # print(schedule_args)
+
+        return config_args, action_args, task_args, schedule_args
+
+
+class DocGenerator:
+
+    # ArgParser.ARG_PARSER_FORMATS
+    SHIFT_HEADER = "  "
+    SHIFT_DOC = "      "
+
     @classmethod
-    def create_schedule_subparsers(cls, subparsers) -> (dict, list):
-
-        # schedule subparsers
-        schedule_parsers = {}
-
-        crontab_schedule_name = 'crontab'
-        crontab_parser = subparsers.add_parser(crontab_schedule_name)
-        schedule_parsers[crontab_schedule_name] = crontab_parser
-        crontab_parser.add_argument('--minute', type=str, help=f'Default \'*\'', default='*')
-        crontab_parser.add_argument('--hour', type=str, help=f'Default \'*\'', default='*')
-        crontab_parser.add_argument('--day_of_week', type=str, help=f'Default \'*\'', default='*')
-        crontab_parser.add_argument('--day_of_month', type=str, help=f'Default \'*\'', default='*')
-        crontab_parser.add_argument('--month_of_year', type=str, help=f'Default \'*\'', default='*')
-        crontab_parser.add_argument('--crontab_line', type=str,
-                                    help=f"Short recording of all previous parameters in one line. Default empty. "
-                                         f"Example: '32 18 17,21,29 11 mon,wed', '10 * * * *'",
-                                    default=None)
-
-        interval_schedule_name = 'interval'
-        interval_parser = subparsers.add_parser(interval_schedule_name)
-        schedule_parsers[interval_schedule_name] = interval_parser
-        interval_parser.add_argument('--every', type=int, required=True, help='Run every N * time range')
-        interval_parser.add_argument('--period', type=str, required=True, help='Time range; example: minutes')
-
-        solar_schedule_name = 'solar'
-        solar_parser = subparsers.add_parser(solar_schedule_name)
-        schedule_parsers[solar_schedule_name] = solar_parser
-        solar_parser.add_argument('--event', type=str, required=True,
-                                  help="Solar events. Available: 'dawn_astronomical', 'dawn_nautical', 'dawn_civil', 'sunrise', 'solar_noon', 'sunset', 'dusk_civil', 'dusk_nautical', 'dusk_astronomical'. "
-                                       'For more info: https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html#solar-schedules')
-        solar_parser.add_argument('--latitude', type=Union[int, float], required=True,
-                                  help='Current latitude. Value must be between -180 and 180.')
-        solar_parser.add_argument('--longitude', type=Union[int, float], required=True,
-                                  help='Current longitude. Value must be between -180 and 180.')
-
-        clocked_schedule_name = 'clocked'
-        clocked_parser = subparsers.add_parser(clocked_schedule_name)
-        schedule_parsers[clocked_schedule_name] = clocked_parser
-        clocked_parser.add_argument('--clocked_time', type=str, required=True,
-                                    help='Datetime format; example: 2023-11-28 01:01:01')
-
-        required_one_off_schedules = [clocked_schedule_name, ]
-
-        return schedule_parsers, required_one_off_schedules
+    def _generate_header(cls, field):
+        return cls.SHIFT_HEADER + f"--{field}:\n"
 
     @classmethod
-    def create_task_subparsers(cls, subparsers):
-
-        task_parser = subparsers.add_parser('task')
-
-        task_parser.add_argument('-T', '--task', type=str,
-                                 help="Task for schedule. Example: \'super_scheduler.tasks.test_logger\'. "
-                                      "To see all available tasks use flag '--get'.")
-        task_parser.add_argument('-N', '--name', type=str, help='Periodic task (scheduled) name. Must be unique.')
-        task_parser.add_argument('--args', type=str,
-                                 help="Task args if necessary. Only use with argument '--task'. "
-                                      "Example: '--args \"value1,value2,value3\"', '--args \"ls,-la\"'")
-        task_parser.add_argument('--kwargs', type=str,
-                                 help="Task kwargs if necessary. Only use with argument '--task'. "
-                                      "Example: '--kwargs \"arg1=value1,arg2=value2\"'")
-        task_parser.add_argument('--priority', type=int, help='Periodic task priority from 0 to 255 (integer).')
-        task_parser.add_argument('--one_off', action='store_true', help="Run periodic task only ones. "
-                                                                        "Always use with 'clocked' schedule.")
-        task_parser.add_argument('--disable', action='store_true', help='Disable task and do not run on schedule')
-        task_parser.add_argument('--start_time', type=str, help='Datetime when the schedule should begin '
-                                                                'triggering the task to run')
-        task_parser.add_argument('--expires', type=str, help='Datetime after which the schedule will no longer '
-                                                             'trigger the task to run')
-
-        return task_parser
+    def _generate_description(cls, text):
+        return cls.SHIFT_DOC + f"Description: {text}\n"
 
     @classmethod
-    def create_parsers(cls):
-        parser = argparse.ArgumentParser(
-            description='SuperScheduler client.\n'
-                        'To see schedule args.\n'
-                        "Use '--' to split positional arguments."
-        )
+    def _generate_required(cls, required: bool):
+        return cls.SHIFT_DOC + f"Required: {required}\n"
 
-        parser.add_argument('-U', '--username', type=str,
-                            help=f'Username for authorization. Default: \'{cls.USERNAME}\'.', default=cls.USERNAME)
-        parser.add_argument('-P', '--password', type=str,
-                            help=f'User password for authorization. Default: \'{cls.PASSWORD}\'.', default=cls.PASSWORD)
+    @classmethod
+    def _generate_default(cls, text):
+        if text is None:
+            return cls.SHIFT_DOC + f"No default value\n"
+        return cls.SHIFT_DOC + f"Default: {text}\n"
 
-        parser.add_argument('--host', type=str, help=f'Ip complex_rest. Default: \'{cls.COMPLEX_REST_HOST}\'.',
-                            default=cls.COMPLEX_REST_HOST)
-        parser.add_argument('--port', type=str, help=f'Port complex_rest. Default: \'{cls.COMPLEX_REST_PORT}\'.',
-                            default=cls.COMPLEX_REST_PORT)
+    @classmethod
+    def _generate_example(cls, text):
+        if text is None:
+            return ""
+        return cls.SHIFT_DOC + f"Example: {text}\n"
 
-        parser.add_argument('--create', action='store_true',
-                            help="Create periodic task. Required argumets: '--task', '--name'. "
-                                 "Optional argumets: '--args', '--kwargs', '--one_off'.")
-        parser.add_argument('--delete', action='store_true',
-                            help="Delete periodic task. Required arguments: '--name'.")
-        parser.add_argument('--get', action='store_true',
-                            help='Get all available tasks and names of periodic tasks. Non required argumets.')
+    @classmethod
+    def generate(cls):
+        for key, parser in ArgParser.ARG_PARSER_FORMATS.items():
+            parser: pydantic.main.ModelMetaclass
+            print(f"Available args and flags for {key} parser:\n")
+            parser_fields = parser.__fields__
+            for field, value in parser_fields.items():
+                value: pydantic.fields.ModelField
 
-        subparsers = parser.add_subparsers()
-        task_parser = SuperScheduler.create_task_subparsers(subparsers)
-        task_subparsers = task_parser.add_subparsers()
-        schedule_parsers, required_one_off_schedules = SuperScheduler.create_schedule_subparsers(task_subparsers)
+                doc_string = cls._generate_header(field) + \
+                             cls._generate_description(value.field_info.description) + \
+                             cls._generate_required(value.required) + \
+                             cls._generate_default(value.default) + \
+                             cls._generate_example(value.field_info.extra.get('example', None))
 
-        return parser, subparsers, task_parser, task_subparsers, schedule_parsers, required_one_off_schedules
+                print(doc_string)
 
 
 def client():
-    """
-
-    Example:
-
-        -C -T super_scheduler.tasks.test_logger --one_off --name test_logger123
-        clocked --clocked_time '2023-11-28 01:01:01'
-
-        -C -T super_scheduler.tasks.test_logger --one_off --name test_logger123 crontab
-
-        -C -T super_scheduler.tasks.test_logger --one_off --name test_logger123 interval --every 1 --period minutes
-
-        -D --name test_logger123
-
-        -C task -T super_scheduler.tasks.otlmakejob -args "| otstats index=test" --one_off --name test_otl -- clocked --clocked_time '2023-11-28 01:01:01'
-
-    """
-
-    parser, subparsers, task_parser, task_subparsers, schedule_parsers, required_one_off_schedules = SuperScheduler.create_parsers()
-
-    args = parser.parse_known_args()[0]
-    print("\nArgs:")
-    SuperScheduler.pretty_print(data_dict2dict=args.__dict__)
+    config_args, action_args, task_args, schedule_args = ArgParser().parse()
     logger.debug("Parsed args")
 
-    # auth
-    username = args.username
-    password = args.password
-    SuperScheduler.USERNAME, SuperScheduler.PASSWORD = username, password
-    if (username, password).count(None) > 0:
-        raise ValueError("Set both username and password")
-    logger.debug("Parsed username & password")
+    print("\nConfig args:")
+    SuperScheduler.pretty_print(data_dict2dict=config_args)
 
-    # address
-    host = args.host
-    port = args.port
-    SuperScheduler.COMPLEX_REST_HOST, SuperScheduler.COMPLEX_REST_PORT = host, port
-    logger.debug("Parsed address")
+    print("\nAction args:")
+    SuperScheduler.pretty_print(data_dict2dict=action_args)
 
-    token = SuperScheduler.auth()
-    logger.debug("Success login")
 
-    # event args
-    create = args.create
-    delete = args.delete
-    get = args.get
-    if sum([create, delete, get]) != 1:
-        raise ValueError("Set one flag '--create', '--delete' or '--get' before 'task'!")
-    logger.debug("Got event")
+    SuperScheduler.USERNAME, SuperScheduler.PASSWORD, \
+    SuperScheduler.COMPLEX_REST_HOST, SuperScheduler.COMPLEX_REST_PORT = \
+        config_args['username'], config_args['password'], \
+        config_args['host'], config_args['port']
 
-    # construct data for request
-    data = {}
-    if 'task' in sys.argv[1:]:
+    SuperSchedulerClass = SuperScheduler()
+    SuperSchedulerClass.auth()
 
-        if create and (not args.task or not args.name):
-            raise ValueError("Set '--task' and '--name'")
+    data = SuperSchedulerClass.new_data_construction(task_args, schedule_args, ['clocked'])
 
-        elif delete and not args.name:
-            raise ValueError("Set '--name'")
+    print("\nRequest data:")
+    SuperScheduler.pretty_print(data_dict2dict=data)
 
-        # enabled
-        enabled = not args.disable
-
-        data = SuperScheduler.data_construction(
-            args.task,
-            args.name,
-            schedule_parsers,
-            [] if not args.args else args.args,
-            {} if not args.kwargs else args.kwargs,
-            args.one_off,
-            args.priority,
-            enabled,
-            args.start_time,
-            args.expires,
-            required_one_off_schedules,
-            is_required_schedule=True if create else False
-        )
-        logger.debug("Success data construction")
-
-    SuperScheduler.send_request(data, token, post=create, delete=delete, get=get)
-    logger.debug("Success send request")
+    SuperSchedulerClass.send_request_to_super_scheduler(post=action_args['create'], delete=action_args['delete'], get=action_args['get'])
 
 
 if __name__ == "__main__":
     client()
+

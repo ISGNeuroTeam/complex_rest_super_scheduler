@@ -1,16 +1,16 @@
-import json
-import logging
-import ast
-import os
-import time
-from typing import Optional
-import celery
-from redis import Redis
-from pottery import RedisCounter
 from django_celery_beat.models import PeriodicTask
-
-import requests
 from requests.exceptions import RequestException
+from pottery import RedisCounter
+from typing import Optional
+from redis import Redis
+import requests
+import logging
+import celery
+import json
+import time
+import os
+
+from rest.response import status
 
 from core.celeryapp import app
 from core.settings.base import REDIS_CONNECTION_STRING
@@ -18,9 +18,11 @@ from .settings import \
     COMPLEX_REST_ADDRESS, JOBSMANAGER_TRANSIT, \
     MAX_RETRIES, RETRY_JITTER, MAX_RETRY_BACKOFF, AUTO_DISABLE
 from .utils.del_schedule import del_unused_schedules
+from .utils.celery_task import get_periodic_task_names_by_task_kwargs, \
+    get_periodic_task_names_by_task_name, \
+    get_task_name_by_class
 
 
-app.conf.update(result_extended=True)
 logger = logging.getLogger('super_scheduler.tasks')
 
 
@@ -31,38 +33,6 @@ def get_current_user() -> str:
     except:
         logger.warning("Not work os.getlogin, try os.getenv")
         return os.getenv('username')
-
-
-def get_task_id_by_class(task_class: celery.Task) -> str:
-    return task_class.request.id
-
-
-def get_task_name_by_class(task_class: celery.Task) -> str:
-    return task_class.request.task
-
-
-def get_periodic_task_names_by_task_name(
-        task_name: str,
-        args: Optional[list] = None,
-        kwargs: Optional[dict] = None,
-) -> Optional[list]:
-    if not args:
-        args = []
-    if not kwargs:
-        kwargs = {}
-    all_periodic_tasks = PeriodicTask.objects.values('name', 'task', 'args', 'kwargs')
-    p_task_names = []
-    for p_task in all_periodic_tasks:
-        if p_task['task'] == task_name and \
-                ast.literal_eval(p_task['args']) == args and \
-                ast.literal_eval(p_task['kwargs']) == kwargs:
-            logger.info(f"Found periodic task {p_task['task']} with name {p_task['name']}")
-            p_task_names += [p_task['name']]
-    return p_task_names if p_task_names else None
-
-
-def get_periodic_task_names_by_task_kwargs(task_kwargs: dict) -> Optional[str]:
-    return task_kwargs.get('name', None)
 
 
 class BaseTask(celery.Task):
@@ -157,7 +127,7 @@ def trash_cleaner(self, clean_old_schedule: bool = True,) -> None:
 )
 def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
                tws: int = 0, twf: int = 0, sid: Optional[str] = None, ttl: int = 100, timeout: int = 100,
-               username: str = 'admin', **kwargs) -> None:
+               username: str = 'admin', **kwargs) -> int:
     """
     Run the OTL line on a schedule.
     For task.request: https://docs.celeryq.dev/en/stable/userguide/tasks.html#task-request-info.
@@ -172,6 +142,7 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
     :param ttl: timeout cache_ttl
     :param timeout: timeout
     :param username: username
+    :return: status code
 
     """
 
@@ -264,6 +235,13 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
     # content = getresult()
 
     logger.info(f'{sid} Finished task: {self.request.id}.')
+    return status.HTTP_200_OK
+
+
+def group_otlmakejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
+                     tws: int = 0, twf: int = 0, sid: Optional[str] = None, ttl: int = 100, timeout: int = 100,
+                     username: str = 'admin', **kwargs):
+    pass
 
 
 # import subprocess
