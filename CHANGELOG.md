@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
  - Renamed 'crontab.py', change russian 'С' to english 'C'
 
+### Changed
+ - New argparser
+
 ## [0.1.0] - 2022-07-15
 ### Add
  - Main functional
