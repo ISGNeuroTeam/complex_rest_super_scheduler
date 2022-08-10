@@ -17,12 +17,12 @@ logger = logging.getLogger("super_scheduler")
 
 
 class SuperScheduler:
-    AUTH_URL = AUTH_URL
-    SUPER_SCHEDULER_URL = SUPER_SCHEDULER_URL
-    COMPLEX_REST_HOST = COMPLEX_REST_HOST
-    COMPLEX_REST_PORT = COMPLEX_REST_PORT
-    USERNAME = USERNAME
-    PASSWORD = PASSWORD
+    AUTH_URL = None
+    SUPER_SCHEDULER_URL = None
+    COMPLEX_REST_HOST = None
+    COMPLEX_REST_PORT = None
+    USERNAME = None
+    PASSWORD = None
 
     logger = logger
     split_chr = ','
@@ -32,6 +32,22 @@ class SuperScheduler:
     def __init__(self):
         self.token = None
         self.data = None
+
+    @classmethod
+    def init_cls_variables(
+            cls,
+            auth_url: Optional[str] = None,
+            super_scheduler_url: Optional[str] = None,
+            username: Optional[str] = None,
+            password: Optional[str] = None,
+            host: Optional[str] = None,
+            port: Optional[str] = None):
+        cls.AUTH_URL = auth_url
+        cls.SUPER_SCHEDULER_URL = super_scheduler_url
+        cls.USERNAME = username
+        cls.PASSWORD = password
+        cls.COMPLEX_REST_HOST = host
+        cls.COMPLEX_REST_PORT = port
 
     @property
     def address(self) -> str:
@@ -577,21 +593,39 @@ def client():
     print("\nAction args:")
     SuperScheduler.pretty_print(data_dict2dict=action_args)
 
+    # if no argument in args line, argparser set default value
+    username = config_args['username']
+    password = config_args['password']
+    host = config_args['host']
+    port = config_args['port']
+    SuperScheduler.init_cls_variables(
+        auth_url=AUTH_URL, super_scheduler_url=SUPER_SCHEDULER_URL,
+        username=username, password=password,
+        host=host, port=port
+    )
 
-    SuperScheduler.USERNAME, SuperScheduler.PASSWORD, \
-    SuperScheduler.COMPLEX_REST_HOST, SuperScheduler.COMPLEX_REST_PORT = \
-        config_args['username'], config_args['password'], \
-        config_args['host'], config_args['port']
+    super_scheduler_class = SuperScheduler()
 
-    SuperSchedulerClass = SuperScheduler()
-    SuperSchedulerClass.auth()
+    # set token
+    super_scheduler_class.auth()
 
-    data = SuperSchedulerClass.new_data_construction(task_args, schedule_args, ['clocked'])
+    # create data
+    data = super_scheduler_class.new_data_construction(
+        task_args,
+        schedule_args,
+        ['clocked'],
+    )
 
+    # show requested data
     print("\nRequest data:")
     SuperScheduler.pretty_print(data_dict2dict=data)
 
-    SuperSchedulerClass.send_request_to_super_scheduler(post=action_args['create'], delete=action_args['delete'], get=action_args['get'])
+    # send request
+    super_scheduler_class.send_request_to_super_scheduler(
+        post=action_args['create'],
+        delete=action_args['delete'],
+        get=action_args['get']
+    )
 
 
 if __name__ == "__main__":

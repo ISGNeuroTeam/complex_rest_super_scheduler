@@ -21,9 +21,10 @@ from .utils.del_schedule import del_unused_schedules
 from .utils.celery_task import get_periodic_task_names_by_task_kwargs, \
     get_periodic_task_names_by_task_name, \
     get_task_name_by_class
+from .utils.get_task import get_all_active_tasks
 
 
-logger = logging.getLogger('super_scheduler.tasks')
+logger = logging.getLogger("super_scheduler.tasks")
 
 
 # os.getlogin() now work for WSL
@@ -39,79 +40,82 @@ class BaseTask(celery.Task):
 
     MAX_ERROR_COUNTER = MAX_RETRIES
 
-    def _create_unique_task_name(self, args: list, kwargs: dict):
-        task_name = get_task_name_by_class(self)
-        return f'Task: {task_name}; args: {args}; kwargs: {kwargs}'
+    # my init
+    def init(self, task_id, args, kwargs):
+        self.p_task_name = self._get_p_task_name(args, kwargs)
+        # self.logger = logging.getLogger(f"super_scheduler.tasks {self.request.hostname} {self.p_task_name} {task_id}")
+        self.logger = logging.getLogger(f"super_scheduler.task {self.p_task_name} {task_id}")
 
-    def on_retry(self, exc: str, task_id: str, args: list, kwargs: dict, einfo: str):
+    def _get_p_task_names(self, args, kwargs) -> list:
+        """
+        OLD VERSION! NOT USE!
+        Get periodic task name from task, args and kwargs.
+        """
+        p_task_names: list = get_periodic_task_names_by_task_name(task_name=get_task_name_by_class(self),
+                                                                  args=args)
+        self.logger.info(f'Found periodic task name with task {get_task_name_by_class(self)}, '
+                         f'args {args} and kwargs {kwargs}')
+        return p_task_names
 
+    def _get_p_task_name(self, args, kwargs) -> str:
+        """
+        Get periodic task name from kwargs.
+        """
         p_task_name = get_periodic_task_names_by_task_kwargs(kwargs)
 
-        if p_task_name:
-            p_task_names = [p_task_name]
-            logger.info(f'Found periodic task name in kwargs: {p_task_names}')
-        else:
-            p_task_names: list = get_periodic_task_names_by_task_name(task_name=get_task_name_by_class(self),
-                                                                      args=args)
-            logger.info(f'Found periodic task name with task {get_task_name_by_class(self)}, '
-                        f'args {args} and kwargs {kwargs}')
-
-        if not p_task_names:
-            logger.error(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
-                         f"and kwargs {kwargs}")
+        if not p_task_name:
+            self.logger.error(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
+                              f"and kwargs {kwargs}")
             raise ValueError(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
                              f"and kwargs {kwargs}")
 
-        unique_task_name = self._create_unique_task_name(args, kwargs)
+        return p_task_name
 
-        redis = Redis.from_url(REDIS_CONNECTION_STRING)
-        c = RedisCounter(redis=redis, key=unique_task_name)
-        c['errors_counter'] += 1
+    def _check_another_running_task(self, task_id, args, kwargs):
+        p_task_name = self._get_p_task_name(args, kwargs)
+        p_task_id = task_id
 
-        logger.error(f'Exception message: {exc}')
-        logger.error(f"Total errors with task {p_task_names}: {c['errors_counter']}")
+        running_tasks: list = get_all_active_tasks()[self.request.hostname]
 
-        if AUTO_DISABLE and c['errors_counter'] > self.MAX_ERROR_COUNTER:
+        running_task: dict
+        for running_task in running_tasks:
+            running_p_task_id = running_task['id']
+            args, kwargs = running_task['args'], running_task['kwargs']
+            running_p_task_name = self._get_p_task_name(args, kwargs)
 
-            logger.error(f"Too many errors. Disable {unique_task_name}.")
+            if running_p_task_name == p_task_name and running_p_task_id != p_task_id:
+                logger.error(f"Previous started periodic task with name {running_p_task_name} "
+                             f"haven't been finished yet")
+                raise ProcessLookupError(f"Previous started periodic task with name {running_p_task_name} "
+                                         f"haven't been finished yet")
 
-            for p_task_name in p_task_names:
-                p_task = PeriodicTask.objects.get(name=p_task_name)
-                p_task.enabled = False
-                p_task.save()
+    def _disable_task_after_fails(self, args, kwargs, exc):
 
-            c['errors_counter'] = 0
+        p_task_name = self._get_p_task_name(args, kwargs)
+
+        self.logger.error(f'Exception message: {exc}')
+        self.logger.error(f"Total errors with task {p_task_name}: {self.request.retries}")
+
+        if AUTO_DISABLE and self.request.retries > self.MAX_ERROR_COUNTER:
+            self.logger.error(f"Too many errors. Disable periodic task '{p_task_name}'.")
+
+            p_task = PeriodicTask.objects.get(name=p_task_name)
+            p_task.enabled = False
+            p_task.save()
+
+    def before_start(self, task_id, args, kwargs):
+
+        self.init(task_id, args, kwargs)
+        self._check_another_running_task(task_id, args, kwargs)
+
+    def on_retry(self, exc: str, task_id: str, args: list, kwargs: dict, einfo: str):
+
+        self._disable_task_after_fails(args, kwargs, exc)
 
     def on_success(self, retval, task_id: str, args: list, kwargs: dict):
-        unique_task_name = self._create_unique_task_name(args, kwargs)
-        redis = Redis.from_url(REDIS_CONNECTION_STRING)
-        c = RedisCounter(redis=redis, key=unique_task_name)
-        c['errors_counter'] = 0
+        pass
 
 
-@app.task(bind=True)
-def logger_msg(self, msg: str = None) -> None:
-    sid = str(self.request.id)  # uuid.uuid4()
-    logger.info(sid + ' ' + msg)
-
-
-@app.task(bind=True)
-def trash_cleaner(self, clean_old_schedule: bool = True,) -> None:
-    """
-    Clean trash in database: delete unused schedules.
-
-    :param clean_old_schedule: delete unused schedules
-    """
-    sid = str(self.request.id)  # uuid.uuid4()
-    logger.info(f'{sid} Trash cleaning...')
-
-    if clean_old_schedule:
-        del_unused_schedules()
-
-    logger.info(f'{sid} Trash cleaned.')
-
-
-# priority
 @app.task(
     base=BaseTask,
     bind=True,  # use for more info in self param
@@ -122,7 +126,69 @@ def trash_cleaner(self, clean_old_schedule: bool = True,) -> None:
         'max_retries': MAX_RETRIES,
         'retry_jitter': RETRY_JITTER,
         'retry_backoff_max': MAX_RETRY_BACKOFF,
-        'result_extended': True,
+    },
+)
+def logger_msg(self, msg: str = None, **kwargs) -> None:
+    self.logger.info(msg)
+
+
+@app.task(
+    base=BaseTask,
+    bind=True,  # use for more info in self param
+    autoretry_for=(RequestException,),
+    retry_backoff=True,
+    result_extended=True,
+    retry_kwargs={
+        'max_retries': MAX_RETRIES,
+        'retry_jitter': RETRY_JITTER,
+        'retry_backoff_max': MAX_RETRY_BACKOFF,
+    },
+)
+def test_logger_msg_with_sleep(self, time_sleep: str, **kwargs) -> None:
+    # sid = str(self.request.id)  # uuid.uuid4()
+
+    self.logger.info(f'Test logger with sleep started.')
+    time.sleep(int(time_sleep))
+    self.logger.info(f'Test logger with sleep finished.')
+
+
+@app.task(
+    base=BaseTask,
+    bind=True,  # use for more info in self param
+    autoretry_for=(RequestException,),
+    retry_backoff=True,
+    result_extended=True,
+    retry_kwargs={
+        'max_retries': MAX_RETRIES,
+        'retry_jitter': RETRY_JITTER,
+        'retry_backoff_max': MAX_RETRY_BACKOFF,
+    },
+)
+def trash_cleaner(self, clean_old_schedule: bool = True, **kwargs) -> None:
+    """
+    Clean trash in database: delete unused schedules.
+
+    :param clean_old_schedule: delete unused schedules
+    """
+    # sid = str(self.request.id)  # uuid.uuid4()
+    self.logger.info(f'Trash cleaning...')
+
+    if clean_old_schedule:
+        del_unused_schedules()
+
+    self.logger.info(f'Trash cleaned.')
+
+
+@app.task(
+    base=BaseTask,
+    bind=True,  # use for more info in self param
+    autoretry_for=(RequestException,),
+    retry_backoff=True,
+    result_extended=True,
+    retry_kwargs={
+        'max_retries': MAX_RETRIES,
+        'retry_jitter': RETRY_JITTER,
+        'retry_backoff_max': MAX_RETRY_BACKOFF,
     },
 )
 def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
@@ -147,8 +213,8 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
     """
 
     def request_error(content):
-        logger.error(f'{sid} Content text: {content.text}.')
-        logger.error(f'{sid} Status code: {content.status_code}.')
+        self.logger.error(f'Content text: {content.text}.')
+        self.logger.error(f'Status code: {content.status_code}.')
         raise RequestException
 
     def send_post_request_content_status(_url, _data, post=False, get=False) -> \
@@ -163,19 +229,19 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
         return content, job_status
 
     def makejob() -> requests.Response:
-        logger.info(f'{sid} Sending request on url: {makejob_url}; data: {data}.')
+        self.logger.info(f'Sending request on url: {makejob_url}; data: {data}.')
 
         content, job_status = send_post_request_content_status(makejob_url, data, post=True)
 
         if content.status_code != 200:
             request_error(content)
 
-        logger.info(f'{sid} Created job.')
+        self.logger.info(f'Created job.')
         return content
 
     def checkjob() -> requests.Response:
 
-        logger.info(f'{sid} Sending request on url: {checkjob_url}.')
+        self.logger.info(f'Sending request on url: {checkjob_url}.')
 
         content, job_status = send_post_request_content_status(checkjob_url, data, get=True)
 
@@ -189,25 +255,25 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
         if content.status_code != 200:
             request_error(content)
 
-        logger.info(f'{sid} Checked job.')
+        self.logger.info(f'Checked job.')
         return content
 
     def getresult() -> requests.Response:
 
-        logger.info(f'{sid} Sending request on url: {getresult_url}.')
+        self.logger.info(f'Sending request on url: {getresult_url}.')
 
         content, job_status = send_post_request_content_status(getresult_url, data, get=True)
 
         if content.status_code != 200:
             request_error(content)
 
-        logger.info(f'{sid} Get result job.')
+        self.logger.info(f'Get result job.')
         return content
 
     sid = sid if sid else str(self.request.id)
 
     if not JOBSMANAGER_TRANSIT:
-        logger.error("Add plugin jobsmanager.")
+        self.logger.error("Add plugin jobsmanager.")
         raise ImportError("Add plugin jobsmanager.")
 
     base_url = f'http://{complex_rest_address}/{JOBSMANAGER_TRANSIT}'
@@ -234,7 +300,7 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
     # get job
     # content = getresult()
 
-    logger.info(f'{sid} Finished task: {self.request.id}.')
+    self.logger.info(f'Finished task: {self.request.id}.')
     return status.HTTP_200_OK
 
 

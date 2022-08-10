@@ -9,12 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - New args: priority, start_time, expires
  - New flags: disable
  - New fields in config
- - Base celery task
+ - Base celery class
  - Retries functional
  - Auto disabling task after many fails 2 ways:
    - match task, args and kwargs, then disable ones
    - save in kwargs periodic task name and use it for disabling (add in format validating)
  - Add timeouts after task fails and task trash cleaning
+ - Restriction on against starting a task before the end of the previous one
 
 ### Updated
  - Updated printing and logging

@@ -5,6 +5,13 @@ from django_celery_beat.models import PeriodicTask
 from core.celeryapp import app
 
 
+def get_all_active_tasks() -> dict:
+    """
+    Return all active tasks.
+    """
+    return app.control.inspect().active()
+
+
 def get_all_periodic_tasks() -> set:
     """
     Return all periodic tasks from django model.
