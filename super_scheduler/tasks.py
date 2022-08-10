@@ -6,11 +6,10 @@ from redis import Redis
 import requests
 import logging
 import celery
+import uuid
 import json
 import time
 import os
-
-from rest.response import status
 
 from core.celeryapp import app
 from core.settings.base import REDIS_CONNECTION_STRING
@@ -24,7 +23,7 @@ from .utils.celery_task import get_periodic_task_names_by_task_kwargs, \
 from .utils.get_task import get_all_active_tasks
 
 
-logger = logging.getLogger("super_scheduler.tasks")
+log = logging.getLogger("super_scheduler.tasks")
 
 
 # os.getlogin() now work for WSL
@@ -32,7 +31,7 @@ def get_current_user() -> str:
     try:
         return os.getlogin()
     except:
-        logger.warning("Not work os.getlogin, try os.getenv")
+        log.warning("Not work os.getlogin, try os.getenv")
         return os.getenv('username')
 
 
@@ -64,8 +63,8 @@ class BaseTask(celery.Task):
         p_task_name = get_periodic_task_names_by_task_kwargs(kwargs)
 
         if not p_task_name:
-            self.logger.error(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
-                              f"and kwargs {kwargs}")
+            log.error(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
+                      f"and kwargs {kwargs}")
             raise ValueError(f"Can't find periodic task name with task {get_task_name_by_class(self)}, args {args} "
                              f"and kwargs {kwargs}")
 
@@ -84,24 +83,35 @@ class BaseTask(celery.Task):
             running_p_task_name = self._get_p_task_name(args, kwargs)
 
             if running_p_task_name == p_task_name and running_p_task_id != p_task_id:
-                logger.error(f"Previous started periodic task with name {running_p_task_name} "
-                             f"haven't been finished yet")
+                log.error(f"Previous started periodic task with name {running_p_task_name} "
+                          f"haven't been finished yet")
                 raise ProcessLookupError(f"Previous started periodic task with name {running_p_task_name} "
                                          f"haven't been finished yet")
+
+    @staticmethod
+    def _get_redis_task_attribute(p_task_name: str):
+        redis = Redis.from_url(REDIS_CONNECTION_STRING)
+        attribute = RedisCounter(redis=redis, key=p_task_name)
+        return attribute
 
     def _disable_task_after_fails(self, args, kwargs, exc):
 
         p_task_name = self._get_p_task_name(args, kwargs)
 
-        self.logger.error(f'Exception message: {exc}')
-        self.logger.error(f"Total errors with task {p_task_name}: {self.request.retries}")
+        p_task_redis = self._get_redis_task_attribute(p_task_name)
+        p_task_redis['errors_counter'] += 1
 
-        if AUTO_DISABLE and self.request.retries > self.MAX_ERROR_COUNTER:
+        self.logger.error(f'Exception message: {exc}')
+        self.logger.error(f"Total errors with task {p_task_name}: {p_task_redis['errors_counter']}")
+
+        if AUTO_DISABLE and p_task_redis['errors_counter'] > self.MAX_ERROR_COUNTER:
             self.logger.error(f"Too many errors. Disable periodic task '{p_task_name}'.")
 
             p_task = PeriodicTask.objects.get(name=p_task_name)
             p_task.enabled = False
             p_task.save()
+
+            p_task_redis['errors_counter'] = 0
 
     def before_start(self, task_id, args, kwargs):
 
@@ -145,8 +155,6 @@ def logger_msg(self, msg: str = None, **kwargs) -> None:
     },
 )
 def test_logger_msg_with_sleep(self, time_sleep: str, **kwargs) -> None:
-    # sid = str(self.request.id)  # uuid.uuid4()
-
     self.logger.info(f'Test logger with sleep started.')
     time.sleep(int(time_sleep))
     self.logger.info(f'Test logger with sleep finished.')
@@ -179,6 +187,77 @@ def trash_cleaner(self, clean_old_schedule: bool = True, **kwargs) -> None:
     self.logger.info(f'Trash cleaned.')
 
 
+class OtlTaskMethods:
+
+    base_url = f'http://{COMPLEX_REST_ADDRESS}/{JOBSMANAGER_TRANSIT}'
+    makejob_url = base_url + '/makejob'
+    checkjob_url = base_url + '/checkjob'
+    getresult_url = base_url + '/getresult'
+
+    def __init__(self, data, logger, complex_rest_address):
+        self.base_url = f'http://{complex_rest_address}/{JOBSMANAGER_TRANSIT}'
+        self.data = data
+        self.logger = logger
+
+    def request_error(self, content):
+        self.logger.error(f'Content text: {content.text}.')
+        self.logger.error(f'Status code: {content.status_code}.')
+        raise RequestException
+
+    def send_post_request_response_status(self, _url, _data, post=False, get=False) -> \
+            (requests.Response, Optional[str]):
+        if post:
+            response = requests.post(_url, data=_data)
+        elif get:
+            response = requests.get(_url, data=_data)
+        else:
+            return None, None
+        job_status = json.loads(response.content)['status'] if response.status_code == 200 else None
+        return response, job_status
+
+    def makejob(self) -> requests.Response:
+        self.logger.info(f'Sending request on url: {self.makejob_url}; data: {self.data}.')
+
+        response, job_status = self.send_post_request_response_status(self.makejob_url, self.data, post=True)
+
+        if response.status_code != 200:
+            self.request_error(response)
+
+        self.logger.info(f'Created job.')
+        return response
+
+    def checkjob(self) -> requests.Response:
+
+        self.logger.info(f'Sending request on url: {self.checkjob_url}.')
+
+        response, job_status = self.send_post_request_response_status(self.checkjob_url, self.data, get=True)
+
+        time_start = time.time()
+        while job_status == 'running':
+            time.sleep(1)
+            response, job_status = self.send_post_request_response_status(self.checkjob_url, self.data, get=True)
+            if time.time() - time_start > 60:
+                raise TimeoutError
+
+        if response.status_code != 200:
+            self.request_error(response)
+
+        self.logger.info(f'Checked job.')
+        return response
+
+    def getresult(self) -> requests.Response:
+
+        self.logger.info(f'Sending request on url: {self.getresult_url}.')
+
+        response, job_status = self.send_post_request_response_status(self.getresult_url, self.data, get=True)
+
+        if response.status_code != 200:
+            self.request_error(response)
+
+        self.logger.info(f'Get result job.')
+        return response
+
+
 @app.task(
     base=BaseTask,
     bind=True,  # use for more info in self param
@@ -191,16 +270,16 @@ def trash_cleaner(self, clean_old_schedule: bool = True, **kwargs) -> None:
         'retry_backoff_max': MAX_RETRY_BACKOFF,
     },
 )
-def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
-               tws: int = 0, twf: int = 0, sid: Optional[str] = None, ttl: int = 100, timeout: int = 100,
-               username: str = 'admin', **kwargs) -> int:
+def otl(self, otl_line: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
+        tws: int = 0, twf: int = 0, sid: Optional[str] = None, ttl: int = 100, timeout: int = 100,
+        username: str = 'admin', **kwargs) -> int:
     """
     Run the OTL line on a schedule.
     For task.request: https://docs.celeryq.dev/en/stable/userguide/tasks.html#task-request-info.
     Frequently Asked Questions: https://docs.celeryq.dev/en/stable/faq.html#faq-acks-late-vs-retry.
 
 
-    :param otl: OTL line
+    :param otl_line: OTL line
     :param complex_rest_address: complex_rest address 'host:port'
     :param sid: Search ID
     :param tws: Start search time (epoch)
@@ -208,67 +287,10 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
     :param ttl: timeout cache_ttl
     :param timeout: timeout
     :param username: username
-    :return: status code
-
+    :return:
     """
 
-    def request_error(content):
-        self.logger.error(f'Content text: {content.text}.')
-        self.logger.error(f'Status code: {content.status_code}.')
-        raise RequestException
-
-    def send_post_request_content_status(_url, _data, post=False, get=False) -> \
-            (requests.Response, Optional[str]):
-        if post:
-            content = requests.post(_url, data=_data)
-        elif get:
-            content = requests.get(_url, data=_data)
-        else:
-            return None, None
-        job_status = json.loads(content.content)['status'] if content.status_code == 200 else None
-        return content, job_status
-
-    def makejob() -> requests.Response:
-        self.logger.info(f'Sending request on url: {makejob_url}; data: {data}.')
-
-        content, job_status = send_post_request_content_status(makejob_url, data, post=True)
-
-        if content.status_code != 200:
-            request_error(content)
-
-        self.logger.info(f'Created job.')
-        return content
-
-    def checkjob() -> requests.Response:
-
-        self.logger.info(f'Sending request on url: {checkjob_url}.')
-
-        content, job_status = send_post_request_content_status(checkjob_url, data, get=True)
-
-        time_start = time.time()
-        while job_status == 'running':
-            time.sleep(1)
-            content, job_status = send_post_request_content_status(checkjob_url, data, get=True)
-            if time.time() - time_start > 60:
-                raise TimeoutError
-
-        if content.status_code != 200:
-            request_error(content)
-
-        self.logger.info(f'Checked job.')
-        return content
-
-    def getresult() -> requests.Response:
-
-        self.logger.info(f'Sending request on url: {getresult_url}.')
-
-        content, job_status = send_post_request_content_status(getresult_url, data, get=True)
-
-        if content.status_code != 200:
-            request_error(content)
-
-        self.logger.info(f'Get result job.')
-        return content
+    self.logger.info(f'Starting task...')
 
     sid = sid if sid else str(self.request.id)
 
@@ -276,13 +298,8 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
         self.logger.error("Add plugin jobsmanager.")
         raise ImportError("Add plugin jobsmanager.")
 
-    base_url = f'http://{complex_rest_address}/{JOBSMANAGER_TRANSIT}'
-    makejob_url = base_url + '/makejob'
-    checkjob_url = base_url + '/checkjob'
-    getresult_url = base_url + '/getresult'
-
     data = {'sid': sid,
-            'original_otl': f'{otl} |head 1000',
+            'original_otl': f'{otl_line} |head 1000',
             'tws': tws,
             'twf': twf,
             'username': username,
@@ -291,23 +308,72 @@ def otlmakejob(self, otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
             'cache_ttl': ttl,
             'timeout': timeout}
 
+    otl_manager = OtlTaskMethods(data, self.logger, complex_rest_address)
+
     # make job
-    content = makejob()
+    response = otl_manager.makejob()
 
     # check job; wait finish
-    content = checkjob()
+    response = otl_manager.checkjob()
 
     # get job
-    # content = getresult()
+    # response = otl_manager.getresult()
 
-    self.logger.info(f'Finished task: {self.request.id}.')
-    return status.HTTP_200_OK
+    self.logger.info(f'Finished task.')
 
 
-def group_otlmakejob(otl: str, complex_rest_address: str = COMPLEX_REST_ADDRESS,
-                     tws: int = 0, twf: int = 0, sid: Optional[str] = None, ttl: int = 100, timeout: int = 100,
-                     username: str = 'admin', **kwargs):
-    pass
+@app.task(
+    base=BaseTask,
+    bind=True,  # use for more info in self param
+    autoretry_for=(RequestException,),
+    retry_backoff=True,
+    result_extended=True,
+    retry_kwargs={
+        'max_retries': MAX_RETRIES,
+        'retry_jitter': RETRY_JITTER,
+        'retry_backoff_max': MAX_RETRY_BACKOFF,
+    },
+)
+def group_otl(self, *otl_lines, complex_rest_address: str = COMPLEX_REST_ADDRESS,
+              tws: int = 0, twf: int = 0, ttl: int = 100, timeout: int = 100,
+              username: str = 'admin', **kwargs):
+    """
+    Calculate OTL consistently in the group. If one fail, task stop.
+
+    :param otl_lines: OTL lines
+    :param complex_rest_address: complex_rest address 'host:port'
+    :param tws: Start search time (epoch)
+    :param twf: End search time (epoch)
+    :param ttl: timeout cache_ttl
+    :param timeout: timeout
+    :param username: username
+    :return:
+    """
+
+    self.logger.info(f'Starting task...')
+    self.logger.info(f"Got otl lines: {otl_lines}")
+
+    for otl_line in otl_lines:
+
+        sid = str(uuid.uuid4())
+
+        self.logger.info(f'Starting otl line: {otl_line}.')
+        data = {'sid': sid,
+                'original_otl': f'{otl_line} |head 1000',
+                'tws': tws,
+                'twf': twf,
+                'username': username,
+                'preview': 'false',
+                'field_extraction': 'false',
+                'cache_ttl': ttl,
+                'timeout': timeout}
+
+        otl_manager = OtlTaskMethods(data, self.logger, complex_rest_address)
+        response = otl_manager.makejob()
+        response = otl_manager.checkjob()
+        self.logger.info(f'Finished otl line: {otl_line}.')
+
+    self.logger.info(f'Finished task.')
 
 
 # import subprocess
