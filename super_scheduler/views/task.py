@@ -1,13 +1,13 @@
 from rest_framework.request import Request
 from typing import Union, Optional
-import super_logger, logging
+import logging
 import uuid
 
 from rest.permissions import IsAuthenticated
 from rest.response import Response, status
 from rest.views import APIView
 
-from ..utils.get_task import get_all_task_names, get_all_periodic_task_names
+from ..utils.get_task import get_all_task_names, get_all_periodic_task_names, get_all_periodic_task_full, get_all_active_tasks
 from ..periodic_task.periodic_task import PeriodicTask
 from ..schedule.schedule import Schedule
 
@@ -85,7 +85,9 @@ class TaskView(APIView):
 
         data = {
             'tasks': get_all_task_names(),
-            'periodic_tasks': get_all_periodic_task_names(),
+            'periodic_tasks': get_all_periodic_task_full(),
+            'running tasks': get_all_active_tasks(),
         }
+        self.logger.info(f"Data: {data}")
         self.logger.info("Success get periodic tasks.")
         return Response(data=data, status=status.HTTP_200_OK)

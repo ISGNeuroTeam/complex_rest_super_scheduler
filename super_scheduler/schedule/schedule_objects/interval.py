@@ -1,12 +1,20 @@
 from django_celery_beat.models import IntervalSchedule
 from pydantic import validator
+from pydantic.fields import Field
 
 from .base import BaseScheduleFormat
 
 
 class IntervalFormat(BaseScheduleFormat):
-    every: int
-    period: str
+
+    every: int = Field(
+        description="run every N * time range",
+        example="--every 10"
+    )
+    period: str = Field(
+        description="time range",
+        example="--period minutes"
+    )
 
     @validator("every")
     def every_check_interval(cls, value):
