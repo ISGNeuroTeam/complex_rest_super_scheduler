@@ -1,13 +1,13 @@
 from django_celery_beat.models import PeriodicTask
-# from inspect import getmembers, isfunction
-#
-# from .. import tasks
+
 from core.celeryapp import app
 
 
 def get_all_active_tasks() -> dict:
     """
     Return all active tasks.
+
+    return format: {hostname: [{task1: {"name": ..., }}]}
     """
     return app.control.inspect().active()
 

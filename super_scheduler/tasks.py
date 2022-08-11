@@ -17,7 +17,7 @@ from .settings import \
     COMPLEX_REST_ADDRESS, JOBSMANAGER_TRANSIT, \
     MAX_RETRIES, RETRY_JITTER, MAX_RETRY_BACKOFF, AUTO_DISABLE
 from .utils.del_schedule import del_unused_schedules
-from .utils.celery_task import get_periodic_task_names_by_task_kwargs, \
+from .utils.client_task import get_periodic_task_names_by_task_kwargs, \
     get_periodic_task_names_by_task_name, \
     get_task_name_by_class
 from .utils.get_task import get_all_active_tasks

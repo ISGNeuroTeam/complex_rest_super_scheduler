@@ -458,6 +458,8 @@ class SolarScheduleFormat(BaseModel):
 class ArgParser:
 
     HELP_FLAGS: set = {'-h', '--help'}
+    HELP_FLAGS_TASK: set = {'-h-task', '--help-task'}
+    HELP_FLAGS_SCHEDULE: set = {'-h-schedule', '--help-schedule'}
     ARG_PARSER_FORMATS = {
         'config': ConfigFormat,
         'action': ActionFormat,
@@ -475,8 +477,14 @@ class ArgParser:
         self.args = sys.argv[1:]
         self.args_set = set(self.args)
 
-    def check_help_flag(self) -> bool:
-        return any(self.HELP_FLAGS.intersection(self.args_set))
+    def check_help_flag(self) -> Tuple[bool, Optional[str]]:
+        if any(self.HELP_FLAGS_SCHEDULE.intersection(self.args_set)):
+            return True, "schedule"
+        elif any(self.HELP_FLAGS_TASK.intersection(self.args_set)):
+            return True, "task"
+        elif any(self.HELP_FLAGS.intersection(self.args_set)):
+            return True, None
+        return False, None
 
     def group_args(self) -> dict:
 
@@ -492,7 +500,8 @@ class ArgParser:
 
         return result
 
-    def _filter_none_task_args(self, task_args: dict):
+    @staticmethod
+    def _filter_none_task_args(task_args: dict):
         keys = list(task_args.keys())
         for key in keys:
             if task_args[key] is None:
@@ -500,8 +509,9 @@ class ArgParser:
         return task_args
 
     def parse(self) -> Tuple[dict, dict, dict, dict]:
-        if self.check_help_flag():
-            DocGenerator.generate()
+        is_help, help_prefix = self.check_help_flag()
+        if is_help:
+            DocGenerator.generate(key_prefix=help_prefix)
             exit(0)
 
         group_args = self.group_args()
@@ -566,19 +576,41 @@ class DocGenerator:
         return cls.SHIFT_DOC + f"Example: {text}\n"
 
     @classmethod
-    def generate(cls):
+    def _generate_help_doc(cls):
+        help_doc_string = "\nUse these flags to see help:\n"
+        for type_, help_flags in zip(
+                ('all', 'task', 'schedule'),
+                (ArgParser.HELP_FLAGS, ArgParser.HELP_FLAGS_TASK, ArgParser.HELP_FLAGS_SCHEDULE)):
+            help_flags = list(help_flags)
+            help_flags.sort(reverse=True)
+            help_doc_string += cls.SHIFT_HEADER + f"{type_}: {', '.join(help_flags)}\n"
+
+        return help_doc_string
+
+    @classmethod
+    def generate(cls, key_prefix=None):
+
+        help_doc_string = cls._generate_help_doc()
+        print(help_doc_string)
+
         for key, parser in ArgParser.ARG_PARSER_FORMATS.items():
+
+            # check prefix; key in ArgParser.ARG_PARSER_FORMATS must start with prefix
+            if key_prefix and not key.startswith(key_prefix):
+                continue
+
             parser: pydantic.main.ModelMetaclass
             print(f"Available args and flags for {key} parser:\n")
             parser_fields = parser.__fields__
             for field, value in parser_fields.items():
                 value: pydantic.fields.ModelField
 
-                doc_string = cls._generate_header(field) + \
-                             cls._generate_description(value.field_info.description) + \
-                             cls._generate_required(value.required) + \
-                             cls._generate_default(value.default) + \
-                             cls._generate_example(value.field_info.extra.get('example', None))
+                doc_string = \
+                    cls._generate_header(field) + \
+                    cls._generate_description(value.field_info.description) + \
+                    cls._generate_required(value.required) + \
+                    cls._generate_default(value.default) + \
+                    cls._generate_example(value.field_info.extra.get('example', None))
 
                 print(doc_string)
 

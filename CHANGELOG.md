@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Add timeouts after task fails and task trash cleaning
  - Restriction on against starting a task before the end of the previous one
  - Run calculation of otl-lines in sequence in a group; stop task if one fail
+ - Different help flags for each part
 
 ### Updated
  - Updated printing and logging
