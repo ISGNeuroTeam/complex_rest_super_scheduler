@@ -458,8 +458,8 @@ class SolarScheduleFormat(BaseModel):
 class ArgParser:
 
     HELP_FLAGS: set = {'-h', '--help'}
-    HELP_FLAGS_TASK: set = {'-h-task', '--help-task'}
-    HELP_FLAGS_SCHEDULE: set = {'-h-schedule', '--help-schedule'}
+    HELP_FLAGS_TASK: set = {'-h-t', '--help-task'}
+    HELP_FLAGS_SCHEDULE: set = {'-h-s', '--help-schedule'}
     ARG_PARSER_FORMATS = {
         'config': ConfigFormat,
         'action': ActionFormat,
