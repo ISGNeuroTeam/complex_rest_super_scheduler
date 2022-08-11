@@ -1,7 +1,7 @@
 from .interval import IntervalDjangoSchedule, IntervalFormat
 from .crontab import CrontabDjangoSchedule, CrontabFormat
 from .solar import SolarDjangoSchedule, SolarFormat
-from .сlocked import ClockedDjangoSchedule, ClockedFormat
+from .clocked import ClockedDjangoSchedule, ClockedFormat
 
 
 SCHEDULES = {

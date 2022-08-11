@@ -7,9 +7,22 @@ password = admin
 
 [address_rest]
 host = localhost
-port = 55555
+port = 8111
 
 [api]
-auth = auth/login/
-super_scheduler_task = super_scheduler/v1/task/
-makejob = jobsmanager_transit/v1/makejob/
+auth = auth/login
+super_scheduler_task = super_scheduler/v1/task
+jobmanager = dtcd_jobsmanager/v1
+
+[celery]
+# max retries task
+max_retries = 3
+# coef for exponential time sleep between retries: 1 * k, 2 * k, 4 * k, 8 * k, ...
+retry_jitter = 3
+# max time sleep between retries
+max_retry_backoff = 300
+# auto-disable after N fails
+auto-disable = True
+# not start task before finish prev. one
+wait_finish_task = True
+
