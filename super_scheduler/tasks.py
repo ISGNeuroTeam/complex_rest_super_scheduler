@@ -15,7 +15,7 @@ from core.celeryapp import app
 from core.settings.base import REDIS_CONNECTION_STRING
 from .settings import \
     COMPLEX_REST_ADDRESS, JOBSMANAGER_TRANSIT, \
-    MAX_RETRIES, RETRY_JITTER, MAX_RETRY_BACKOFF, AUTO_DISABLE
+    MAX_RETRIES, RETRY_JITTER, MAX_RETRY_BACKOFF, AUTO_DISABLE, WAIT_FINISH_PREV_TASK
 from .utils.del_schedule import del_unused_schedules
 from .utils.client_task import get_periodic_task_names_by_task_kwargs, \
     get_periodic_task_names_by_task_name, \
@@ -71,6 +71,9 @@ class BaseTask(celery.Task):
         return p_task_name
 
     def _check_another_running_task(self, task_id, args, kwargs):
+        if not WAIT_FINISH_PREV_TASK:
+            return
+
         p_task_name = self._get_p_task_name(args, kwargs)
         p_task_id = task_id
 
@@ -375,6 +378,8 @@ def group_otl(self, *otl_lines, complex_rest_address: str = COMPLEX_REST_ADDRESS
 
     self.logger.info(f'Finished task.')
 
+
+# Выполнение bash-скриптов, проблемы безопасности
 
 # import subprocess
 # @app.task()
