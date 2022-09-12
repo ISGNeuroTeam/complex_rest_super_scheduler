@@ -37,6 +37,9 @@ class TaskView(APIView):
         return None
 
     def post(self, request: Request) -> Response:
+        """
+        request example: {'task': {'name': 'taskname', ...}, 'schedule': {'name': 'crontab', ...}}
+        """
 
         req_params = dict(request.data)
         self.logger.info(f"Got post request data: {request.data}")
